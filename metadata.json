@@ -1,0 +1,6 @@
+{
+  "name": "FineCraft",
+  "description": "A mobile voxel sandbox game.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
