@@ -13,7 +13,7 @@ struct InventorySlot {
 
 extern InventorySlot inventory[INVENTORY_SIZE];
 extern int selectedHotbarSlot;
-extern bool isInventoryOpen;
+extern std::atomic<bool> isInventoryOpen;
 
 void initInventory();
 bool addItem(uint16_t itemId, uint16_t count);

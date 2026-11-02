@@ -93,16 +93,19 @@ class MainActivity : ComponentActivity() {
                 onContinueClick = { 
                     MainActivity.nativeSetDebugWorld(false)
                     MainActivity.nativeLoadGame()
+                    MainActivity.nativeSetSimulationActive(true)
                     currentAppState = AppState.GAMEPLAY 
                 },
                 onNewGameClick = { 
                     MainActivity.nativeSetDebugWorld(false)
                     MainActivity.nativeNewGame()
+                    MainActivity.nativeSetSimulationActive(true)
                     currentAppState = AppState.GAMEPLAY 
                 },
                 onDebugWorldClick = {
                     MainActivity.nativeSetDebugWorld(true)
                     MainActivity.nativeNewGame()
+                    MainActivity.nativeSetSimulationActive(true)
                     currentAppState = AppState.GAMEPLAY
                 },
                 onSettingsClick = { currentAppState = AppState.SETTINGS }
@@ -110,6 +113,7 @@ class MainActivity : ComponentActivity() {
             AppState.SETTINGS -> SettingsMenu(settings, onBack = { currentAppState = AppState.MAIN_MENU })
             AppState.GAMEPLAY -> GameplayScreen(settings, onBack = { 
                 MainActivity.nativeSaveGame()
+                MainActivity.nativeSetSimulationActive(false)
                 currentAppState = AppState.MAIN_MENU 
             })
         }
@@ -124,11 +128,20 @@ class MainActivity : ComponentActivity() {
     if (currentAppState == AppState.GAMEPLAY) {
         MainActivity.nativeSaveGame()
     }
+    MainActivity.nativeSetSimulationActive(false)
+  }
+
+  override fun onResume() {
+    super.onResume()
+    if (currentAppState == AppState.GAMEPLAY) {
+        MainActivity.nativeSetSimulationActive(true)
+    }
   }
 
   override fun onDestroy() {
     super.onDestroy()
-      }
+    MainActivity.nativeShutdown()
+  }
 
   external fun stringFromJNI(): String
 
@@ -142,6 +155,9 @@ class MainActivity : ComponentActivity() {
     @JvmStatic external fun nativeSurfaceCreated(surface: Surface)
     @JvmStatic external fun nativeSurfaceChanged(width: Int, height: Int)
     @JvmStatic external fun nativeSurfaceDestroyed()
+    @JvmStatic external fun nativeShutdown()
+    @JvmStatic external fun nativeSetSimulationActive(active: Boolean)
+    @JvmStatic external fun nativeGetInventoryVersion(): Int
     
     @JvmStatic external fun nativeSetAtlasPixels(pixels: IntArray, width: Int, height: Int)
     @JvmStatic external fun nativeIsUsingExternalAtlas(): Boolean
@@ -454,12 +470,17 @@ fun InventoryScreen(onClose: () -> Unit, atlasBitmap: ImageBitmap?) {
     var splitDestSlot by remember { mutableStateOf<Int?>(null) }
     var splitDestType by remember { mutableStateOf<Int>(0) }
 
+    var lastVersion by remember { mutableIntStateOf(0) }
     LaunchedEffect(Unit) {
         while(true) {
-            kotlinx.coroutines.delay(100)
-            inventoryState = MainActivity.nativeGetInventory()
-            craftingGridState = MainActivity.nativeGetCraftingGrid()
-            craftingOutputState = MainActivity.nativeGetCraftingOutput()
+            kotlinx.coroutines.delay(150)
+            val currentVersion = MainActivity.nativeGetInventoryVersion()
+            if (currentVersion != lastVersion) {
+                lastVersion = currentVersion
+                inventoryState = MainActivity.nativeGetInventory()
+                craftingGridState = MainActivity.nativeGetCraftingGrid()
+                craftingOutputState = MainActivity.nativeGetCraftingOutput()
+            }
         }
     }
     

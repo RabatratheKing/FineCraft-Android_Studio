@@ -11,6 +11,7 @@
 #include <GLES3/gl3.h>
 
 extern std::atomic<bool> isRunning;
+extern std::atomic<bool> isSimulationActive;
 extern bool windowChanged;
 extern std::mutex windowMutex;
 extern std::condition_variable windowCV;
@@ -36,14 +37,15 @@ struct ChunkPosHash {
     }
 };
 
-extern bool isDebugFly;
+extern std::atomic<bool> isDebugFly;
+extern std::atomic<bool> isInventoryOpen;
 extern glm::vec3 playerVelocity;
-extern bool isGrounded;
-extern bool isCrouching;
-extern bool isSprinting;
-extern float inputMoveX;
-extern float inputMoveY;
-extern bool inputJump;
+extern std::atomic<bool> isGrounded;
+extern std::atomic<bool> isCrouching;
+extern std::atomic<bool> isSprinting;
+extern std::atomic<float> inputMoveX;
+extern std::atomic<float> inputMoveY;
+extern std::atomic<bool> inputJump;
 
 enum class ChunkState {
     Unloaded,
@@ -82,48 +84,49 @@ extern std::vector<GPUUploadJob> uploadQueue;
 extern std::vector<GLuint> deleteQueueVAO;
 extern std::vector<GLuint> deleteQueueVBO;
 
-extern int LoadRadius;
-extern int MeshRadius;
-extern int RenderRadius;
-extern int UnloadRadius;
+extern std::mutex inventoryMutex;
+extern std::atomic<uint32_t> inventoryVersion;
 
-extern float settingFOV;
-extern float currentFOV;
-extern float settingSensitivity;
-extern bool settingInvertY;
-extern int settingRenderDistance;
-extern int settingGraphicsQuality;
-extern bool settingShadows;
-extern bool settingClouds;
-extern bool settingFog;
-extern float settingBrightness;
+extern std::atomic<int> LoadRadius;
+extern std::atomic<int> MeshRadius;
+extern std::atomic<int> RenderRadius;
+extern std::atomic<int> UnloadRadius;
 
-extern float cameraEyeY;
-extern float bobTime;
-extern float bobAmount;
-extern bool settingViewBobbing;
-extern bool settingDebugWorld;
-extern float cameraLookX;
-extern float cameraLookY;
+extern std::atomic<float> settingFOV;
+extern std::atomic<float> currentFOV;
+extern std::atomic<float> settingSensitivity;
+extern std::atomic<bool> settingInvertY;
+extern std::atomic<int> settingRenderDistance;
+extern std::atomic<int> settingGraphicsQuality;
+extern std::atomic<bool> settingShadows;
+extern std::atomic<bool> settingClouds;
+extern std::atomic<bool> settingFog;
+extern std::atomic<float> settingBrightness;
 
-extern float playerX;
-extern float playerY;
-extern float playerZ;
+extern std::atomic<float> cameraEyeY;
+extern std::atomic<float> bobTime;
+extern std::atomic<float> bobAmount;
+extern std::atomic<bool> settingViewBobbing;
+extern std::atomic<bool> settingDebugWorld;
+extern std::atomic<float> cameraLookX;
+extern std::atomic<float> cameraLookY;
 
-extern float timeOfDay;
+extern std::atomic<float> playerX;
+extern std::atomic<float> playerY;
+extern std::atomic<float> playerZ;
 
+extern std::atomic<float> timeOfDay;
 
+extern std::atomic<int> worldSeed;
 
-extern int worldSeed;
-
-extern bool inputBreak;
-extern bool inputPlace;
-extern float miningProgress;
-extern int miningTargetX;
-extern int miningTargetY;
-extern int miningTargetZ;
-extern float placeCooldown;
-extern float breakCooldown;
+extern std::atomic<bool> inputBreak;
+extern std::atomic<bool> inputPlace;
+extern std::atomic<float> miningProgress;
+extern std::atomic<int> miningTargetX;
+extern std::atomic<int> miningTargetY;
+extern std::atomic<int> miningTargetZ;
+extern std::atomic<float> placeCooldown;
+extern std::atomic<float> breakCooldown;
 extern const float INTERACTION_REACH;
 
 enum class LocomotionState {
@@ -140,15 +143,15 @@ enum class LocomotionState {
     DEAD
 };
 extern LocomotionState playerState;
-extern bool isSubmerged;
-extern bool isInWater;
-extern bool isClimbing;
-extern bool isCrawlingState;
+extern std::atomic<bool> isSubmerged;
+extern std::atomic<bool> isInWater;
+extern std::atomic<bool> isClimbing;
+extern std::atomic<bool> isCrawlingState;
 
-extern float playerHealth;
-extern float playerMaxHealth;
-extern bool isDead;
-extern float damageCooldown;
-extern float fallDistance;
-extern float highestY;
-extern float hurtTime;
+extern std::atomic<float> playerHealth;
+extern std::atomic<float> playerMaxHealth;
+extern std::atomic<bool> isDead;
+extern std::atomic<float> damageCooldown;
+extern std::atomic<float> fallDistance;
+extern std::atomic<float> highestY;
+extern std::atomic<float> hurtTime;

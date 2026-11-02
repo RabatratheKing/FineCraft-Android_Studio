@@ -27,15 +27,6 @@
 #include "gameplay/Raycast.h"
 #include "world/ChunkManager.h"
 
-
-
-
-
-
-
-
-
-
 GLuint compileShader(GLenum type, const char* source) {
     GLuint shader = glCreateShader(type);
     glShaderSource(shader, 1, &source, nullptr);
@@ -50,14 +41,12 @@ GLuint compileShader(GLenum type, const char* source) {
     return shader;
 }
 
-
 uint32_t atlasPixelsARGB[256 * 256];
 bool atlasGenerated = false;
 extern uint32_t* externalAtlasPixels;
 extern bool useExternalAtlas;
 extern int externalAtlasWidth;
 extern int externalAtlasHeight;
-
 
 void generateTextureAtlas(GLuint& texID) {
     LOGI("DIAGNOSTICS: generateTextureAtlas called");
@@ -66,7 +55,6 @@ void generateTextureAtlas(GLuint& texID) {
 
     if (!externalAtlasPixels) {
         LOGE("FATAL: externalAtlasPixels is NULL. Atlas was not loaded!");
-        // Minimal 2x2 magenta/black texture so we don't crash
         width = 2; height = 2;
         glPixels = new uint8_t[16]{
             255, 0, 255, 255,   0, 0, 0, 255,
@@ -86,11 +74,8 @@ void generateTextureAtlas(GLuint& texID) {
         }
     }
 
-    LOGI("DIAGNOSTICS: atlasTex before glGenTextures = %u", texID);
     glGenTextures(1, &texID);
-    LOGI("DIAGNOSTICS: atlasTex after glGenTextures = %u", texID);
     glBindTexture(GL_TEXTURE_2D, texID);
-    LOGI("DIAGNOSTICS: Calling glTexImage2D with width=%d, height=%d", width, height);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, glPixels);
     
     GLenum err = glGetError();
@@ -135,10 +120,9 @@ void renderLoop() {
     EGLSurface surface = EGL_NO_SURFACE;
 
     bool resourcesLoaded = false;
-    GLuint shaderProgram;
-    GLuint skyShaderProgram;
+    GLuint shaderProgram = 0;
+    GLuint skyShaderProgram = 0;
     GLuint atlasTex = 0;
-    GLuint VBO, VAO;
     GLint projLoc = -1;
     GLint viewLoc = -1;
     GLint modelLoc = -1;
@@ -170,13 +154,15 @@ void renderLoop() {
     
     auto lastTime = std::chrono::high_resolution_clock::now();
 
-    while (isRunning) {
+    while (isRunning.load()) {
         auto currentTime = std::chrono::high_resolution_clock::now();
         float dt = std::chrono::duration<float>(currentTime - lastTime).count();
         lastTime = currentTime;
         
-        tickPhysics(dt);
-        tickInteraction(dt);
+        if (isSimulationActive.load()) {
+            tickPhysics(dt);
+            tickInteraction(dt);
+        }
 
         bool hasWindow = false;
         {
@@ -206,15 +192,6 @@ void renderLoop() {
                 glAttachShader(shaderProgram, vertexShader);
                 glAttachShader(shaderProgram, fragmentShader);
                 glLinkProgram(shaderProgram);
-                GLint linkSuccess;
-                glGetProgramiv(shaderProgram, GL_LINK_STATUS, &linkSuccess);
-                if (!linkSuccess) {
-                    char infoLog[512];
-                    glGetProgramInfoLog(shaderProgram, 512, nullptr, infoLog);
-                    LOGE("DIAGNOSTICS: Shader Program Link Failed: %s", infoLog);
-                } else {
-                    LOGI("DIAGNOSTICS: Shader Program Linked Successfully");
-                }
                 glDeleteShader(vertexShader);
                 glDeleteShader(fragmentShader);
                 
@@ -226,8 +203,7 @@ void renderLoop() {
                 glLinkProgram(skyShaderProgram);
                 glDeleteShader(skyVS);
                 glDeleteShader(skyFS);
-                
-                
+
                 GLuint outlineVS = compileShader(GL_VERTEX_SHADER, wireframeVertexShaderSource);
                 GLuint outlineFS = compileShader(GL_FRAGMENT_SHADER, wireframeFragmentShaderSource);
                 outlineShaderProgram = glCreateProgram();
@@ -257,11 +233,9 @@ void renderLoop() {
                 glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
                 glEnableVertexAttribArray(0);
 
-
                 generateTextureAtlas(atlasTex);
                 glUseProgram(shaderProgram);
                 GLint atlasLoc = glGetUniformLocation(shaderProgram, "atlas");
-                LOGI("DIAGNOSTICS: atlas uniform location = %d", atlasLoc);
                 glUniform1i(atlasLoc, 0);
                 
                 projLoc = glGetUniformLocation(shaderProgram, "projection");
@@ -287,16 +261,15 @@ void renderLoop() {
                 skyBrightnessLoc = glGetUniformLocation(skyShaderProgram, "u_brightness");
 
                 glEnable(GL_DEPTH_TEST);
-                
                 resourcesLoaded = true;
             }
 
             glViewport(0, 0, width, height);
             
-            timeOfDay += 0.002f;
-            float sunH = sin(timeOfDay);
+            float tOfDay = timeOfDay.load() + 0.002f;
+            timeOfDay.store(tOfDay);
+            float sunH = sin(tOfDay);
             
-            // Sky gradient calculation
             glm::vec3 zenithNight = glm::vec3(0.02f, 0.03f, 0.08f);
             glm::vec3 zenithDay = glm::vec3(0.15f, 0.4f, 0.9f);
             glm::vec3 zenithColor = glm::mix(zenithNight, zenithDay, glm::clamp(sunH + 0.3f, 0.0f, 1.0f));
@@ -309,7 +282,7 @@ void renderLoop() {
             if (sunH < -0.2f) {
                 horizonColor = horizonNight;
             } else if (sunH < 0.2f) {
-                float t = (sunH + 0.2f) / 0.4f; // 0 to 1
+                float t = (sunH + 0.2f) / 0.4f;
                 if (t < 0.5f) horizonColor = glm::mix(horizonNight, horizonSunrise, t * 2.0f);
                 else horizonColor = glm::mix(horizonSunrise, horizonDay, (t - 0.5f) * 2.0f);
             } else {
@@ -317,14 +290,12 @@ void renderLoop() {
             }
             
             glm::vec3 sunColor = glm::mix(glm::vec3(1.0f, 0.5f, 0.2f), glm::vec3(1.0f, 1.0f, 1.0f), glm::clamp(sunH * 2.0f, 0.0f, 1.0f));
-            glm::vec3 sunDir = glm::normalize(glm::vec3(cos(timeOfDay), sin(timeOfDay), 0.5f));
+            glm::vec3 sunDir = glm::normalize(glm::vec3(cos(tOfDay), sin(tOfDay), 0.5f));
             
-            // Make moon light at night
             if (sunH < -0.1f) {
                 sunColor = glm::vec3(0.1f, 0.15f, 0.25f);
-                sunDir = glm::normalize(glm::vec3(cos(timeOfDay + 3.14159f), sin(timeOfDay + 3.14159f), 0.5f));
+                sunDir = glm::normalize(glm::vec3(cos(tOfDay + 3.14159f), sin(tOfDay + 3.14159f), 0.5f));
             } else if (sunH < 0.1f) {
-                // Transition light intensity
                 float t = (sunH + 0.1f) / 0.2f;
                 sunColor = glm::mix(glm::vec3(0.1f, 0.15f, 0.25f), sunColor, t);
             }
@@ -332,23 +303,31 @@ void renderLoop() {
             glClearColor(horizonColor.r, horizonColor.g, horizonColor.b, 1.0f);
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
             
-            glm::mat4 projection = glm::perspective(glm::radians(currentFOV), (float)width / (float)height, 0.1f, 100.0f);
+            float fov = currentFOV.load();
+            glm::mat4 projection = glm::perspective(glm::radians(fov), (float)width / (float)height, 0.1f, 100.0f);
             
-            float eyeY = cameraEyeY;
-            glm::vec3 cameraPos = glm::vec3(playerX, playerY + eyeY, playerZ);
+            float eyeY = cameraEyeY.load();
+            float pX = playerX.load();
+            float pY = playerY.load();
+            float pZ = playerZ.load();
+            glm::vec3 cameraPos = glm::vec3(pX, pY + eyeY, pZ);
             
+            float cLookX = cameraLookX.load();
+            float cLookY = cameraLookY.load();
             glm::vec3 front;
-            front.x = cos(glm::radians(cameraLookX)) * cos(glm::radians(cameraLookY));
-            front.y = sin(glm::radians(cameraLookY));
-            front.z = sin(glm::radians(cameraLookX)) * cos(glm::radians(cameraLookY));
+            front.x = cos(glm::radians(cLookX)) * cos(glm::radians(cLookY));
+            front.y = sin(glm::radians(cLookY));
+            front.z = sin(glm::radians(cLookX)) * cos(glm::radians(cLookY));
             glm::vec3 cameraFront = glm::normalize(front);
             
             glm::vec3 cameraUp    = glm::vec3(0.0f, 1.0f, 0.0f);
             glm::vec3 cameraRight = glm::normalize(glm::cross(cameraFront, cameraUp));
 
-            if (settingViewBobbing) {
-                float bobOffset = sin(bobTime) * 0.05f * bobAmount;
-                float bobSway = cos(bobTime * 0.5f) * 0.05f * bobAmount;
+            if (settingViewBobbing.load()) {
+                float bTime = bobTime.load();
+                float bAmt = bobAmount.load();
+                float bobOffset = sin(bTime) * 0.05f * bAmt;
+                float bobSway = cos(bTime * 0.5f) * 0.05f * bAmt;
                 cameraPos.y += bobOffset;
                 cameraPos += cameraRight * bobSway;
             }
@@ -365,12 +344,11 @@ void renderLoop() {
             if (skyHorizonColorLoc != -1) glUniform3fv(skyHorizonColorLoc, 1, glm::value_ptr(horizonColor));
             if (skyZenithColorLoc != -1) glUniform3fv(skyZenithColorLoc, 1, glm::value_ptr(zenithColor));
             if (skySunColorLoc != -1) glUniform3fv(skySunColorLoc, 1, glm::value_ptr(sunColor));
-            if (skyTimeLoc != -1) glUniform1f(skyTimeLoc, timeOfDay * 10.0f);
+            if (skyTimeLoc != -1) glUniform1f(skyTimeLoc, tOfDay * 10.0f);
             if (skyCameraPosLoc != -1) glUniform3fv(skyCameraPosLoc, 1, glm::value_ptr(cameraPos));
-            glUniform1i(uUseCloudsLoc, settingClouds ? 1 : 0);
-            glUniform1f(skyBrightnessLoc, settingBrightness);
+            glUniform1i(uUseCloudsLoc, settingClouds.load() ? 1 : 0);
+            glUniform1f(skyBrightnessLoc, settingBrightness.load());
             
-            // Draw 1 full screen triangle
             glDrawArrays(GL_TRIANGLES, 0, 3);
             
             glEnable(GL_DEPTH_TEST);
@@ -380,13 +358,7 @@ void renderLoop() {
             glUseProgram(shaderProgram);
             glActiveTexture(GL_TEXTURE0);
             glBindTexture(GL_TEXTURE_2D, atlasTex);
-            
-            static int drawCount = 0;
-            if (drawCount < 5) {
-                LOGI("DIAGNOSTICS: Terrain draw %d. atlasTex = %u", drawCount, atlasTex);
-                drawCount++;
-            }
-            
+
             glUniformMatrix4fv(projLoc, 1, GL_FALSE, glm::value_ptr(projection));
             glUniformMatrix4fv(viewLoc, 1, GL_FALSE, glm::value_ptr(view));
             if (modelLoc != -1) glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(glm::mat4(1.0f)));
@@ -395,9 +367,9 @@ void renderLoop() {
             if (horizonColorLoc != -1) glUniform3fv(horizonColorLoc, 1, glm::value_ptr(horizonColor));
             if (zenithColorLoc != -1) glUniform3fv(zenithColorLoc, 1, glm::value_ptr(zenithColor));
             if (cameraPosLoc != -1) glUniform3fv(cameraPosLoc, 1, glm::value_ptr(cameraPos));
-            glUniform1i(uUseFogLoc, settingFog ? 1 : 0);
-            glUniform1i(uUseShadowsLoc, settingShadows ? 1 : 0);
-            glUniform1f(uBrightnessLoc, settingBrightness);
+            glUniform1i(uUseFogLoc, settingFog.load() ? 1 : 0);
+            glUniform1i(uUseShadowsLoc, settingShadows.load() ? 1 : 0);
+            glUniform1f(uBrightnessLoc, settingBrightness.load());
 
             std::vector<GPUUploadJob> localUploads;
             std::vector<GLuint> vaosToDelete;
@@ -478,11 +450,12 @@ void renderLoop() {
             std::vector<RenderChunk> renderChunks;
             {
                 std::lock_guard<std::mutex> lock(worldMutex);
+                int rRad = RenderRadius.load();
                 for (const auto& pair : chunks) {
                     if (pair.second.state == ChunkState::GPUResident && pair.second.vertexCount > 0) {
-                        float dx = (pair.first.x * CHUNK_SIZE + 8) - playerX;
-                        float dz = (pair.first.z * CHUNK_SIZE + 8) - playerZ;
-                        if (dx*dx + dz*dz <= RenderRadius*RenderRadius*CHUNK_SIZE*CHUNK_SIZE) {
+                        float dx = (pair.first.x * CHUNK_SIZE + 8) - pX;
+                        float dz = (pair.first.z * CHUNK_SIZE + 8) - pZ;
+                        if (dx*dx + dz*dz <= rRad*rRad*CHUNK_SIZE*CHUNK_SIZE) {
                             glm::vec3 min(pair.first.x * CHUNK_SIZE - 0.5f, -0.5f, pair.first.z * CHUNK_SIZE - 0.5f);
                             glm::vec3 max(pair.first.x * CHUNK_SIZE + CHUNK_SIZE - 0.5f, CHUNK_HEIGHT - 0.5f, pair.first.z * CHUNK_SIZE + CHUNK_SIZE - 0.5f);
                             
@@ -521,16 +494,13 @@ void renderLoop() {
                 glUniformMatrix4fv(outlineViewLoc, 1, GL_FALSE, glm::value_ptr(view));
                 glBindVertexArray(outlineVAO);
                 
-                // 1. Render target block outline (black)
                 glUniform4f(outlineColorLoc, 0.0f, 0.0f, 0.0f, 0.8f);
                 glm::mat4 model = glm::mat4(1.0f);
                 model = glm::translate(model, glm::vec3(hit.bx, hit.by, hit.bz));
                 glUniformMatrix4fv(outlineModelLoc, 1, GL_FALSE, glm::value_ptr(model));
                 glDrawArrays(GL_LINES, 0, 24);
                 
-                // 2. Render placement ghost (white)
-                if (inputPlace && placeCooldown > 0.0f) {
-                    // Do not render if we just placed it and it's on cooldown
+                if (inputPlace.load() && placeCooldown.load() > 0.0f) {
                 } else if (!(hit.px == hit.bx && hit.py == hit.by && hit.pz == hit.bz)) {
                     glUniform4f(outlineColorLoc, 1.0f, 1.0f, 1.0f, 0.5f);
                     model = glm::mat4(1.0f);
@@ -539,13 +509,13 @@ void renderLoop() {
                     glDrawArrays(GL_LINES, 0, 24);
                 }
 
-                // 3. Render mining progress
-                if (miningProgress > 0.0f && miningProgress < 1.0f) {
+                float mProg = miningProgress.load();
+                if (mProg > 0.0f && mProg < 1.0f) {
                     glDisable(GL_DEPTH_TEST);
                     glUniform4f(outlineColorLoc, 1.0f, 0.2f, 0.2f, 0.9f);
                     model = glm::mat4(1.0f);
                     model = glm::translate(model, glm::vec3(hit.bx + 0.5f, hit.by + 0.5f, hit.bz + 0.5f));
-                    model = glm::scale(model, glm::vec3(1.0f - miningProgress));
+                    model = glm::scale(model, glm::vec3(1.0f - mProg));
                     model = glm::translate(model, glm::vec3(-0.5f, -0.5f, -0.5f));
                     glUniformMatrix4fv(outlineModelLoc, 1, GL_FALSE, glm::value_ptr(model));
                     glDrawArrays(GL_LINES, 0, 24);
@@ -566,4 +536,3 @@ void renderLoop() {
     eglDestroyContext(display, context);
     eglTerminate(display);
 }
-

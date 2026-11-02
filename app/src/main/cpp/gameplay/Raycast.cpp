@@ -21,13 +21,15 @@ float getBlockHardness(uint8_t blockId) {
 }
 
 RaycastHit getTargetBlock() {
-    float eyeY = cameraEyeY;
-    glm::vec3 pos = glm::vec3(playerX, playerY + eyeY, playerZ);
+    float eyeY = cameraEyeY.load();
+    glm::vec3 pos = glm::vec3(playerX.load(), playerY.load() + eyeY, playerZ.load());
     
+    float cLookX = cameraLookX.load();
+    float cLookY = cameraLookY.load();
     glm::vec3 front;
-    front.x = cos(glm::radians(cameraLookX)) * cos(glm::radians(cameraLookY));
-    front.y = sin(glm::radians(cameraLookY));
-    front.z = sin(glm::radians(cameraLookX)) * cos(glm::radians(cameraLookY));
+    front.x = cos(glm::radians(cLookX)) * cos(glm::radians(cLookY));
+    front.y = sin(glm::radians(cLookY));
+    front.z = sin(glm::radians(cLookX)) * cos(glm::radians(cLookY));
     front = glm::normalize(front);
     
     glm::vec3 prevBlock(-1.0f);
@@ -69,27 +71,32 @@ RaycastHit getTargetBlock() {
 }
 
 void tickInteraction(float dt) {
-    if (isDead) return;
-    if (placeCooldown > 0) placeCooldown -= dt;
-    if (breakCooldown > 0) breakCooldown -= dt;
+    if (isDead.load()) return;
+    float pCooldown = placeCooldown.load();
+    if (pCooldown > 0) placeCooldown.store(pCooldown - dt);
+    float bCooldown = breakCooldown.load();
+    if (bCooldown > 0) breakCooldown.store(bCooldown - dt);
 
     RaycastHit hit = getTargetBlock();
 
     if (!hit.hasHit) {
-        miningProgress = 0.0f;
+        miningProgress.store(0.0f);
         return;
     }
 
     // Check if target changed
-    if (hit.bx != miningTargetX || hit.by != miningTargetY || hit.bz != miningTargetZ) {
-        miningProgress = 0.0f;
-        miningTargetX = hit.bx;
-        miningTargetY = hit.by;
-        miningTargetZ = hit.bz;
+    int mTargetX = miningTargetX.load();
+    int mTargetY = miningTargetY.load();
+    int mTargetZ = miningTargetZ.load();
+    if (hit.bx != mTargetX || hit.by != mTargetY || hit.bz != mTargetZ) {
+        miningProgress.store(0.0f);
+        miningTargetX.store(hit.bx);
+        miningTargetY.store(hit.by);
+        miningTargetZ.store(hit.bz);
     }
 
-    if (inputBreak) {
-        if (breakCooldown <= 0.0f) {
+    if (inputBreak.load()) {
+        if (breakCooldown.load() <= 0.0f) {
             uint8_t targetBlockId = 0;
             int cx = hit.bx / CHUNK_SIZE;
             int cz = hit.bz / CHUNK_SIZE;
@@ -107,11 +114,11 @@ void tickInteraction(float dt) {
 
             float hardness = getBlockHardness(targetBlockId);
             if (hardness > 0.0f) {
-                miningProgress += dt / hardness;
-                if (miningProgress >= 1.0f) {
-                    // Break block
-                    miningProgress = 0.0f;
-                    breakCooldown = 0.2f;
+                float mProg = miningProgress.load() + (dt / hardness);
+                miningProgress.store(mProg);
+                if (mProg >= 1.0f) {
+                    miningProgress.store(0.0f);
+                    breakCooldown.store(0.2f);
                     
                     if (addItem(targetBlockId, 1)) {
                         std::lock_guard<std::mutex> lock(worldMutex);
@@ -128,16 +135,20 @@ void tickInteraction(float dt) {
             }
         }
     } else {
-        miningProgress = 0.0f;
+        miningProgress.store(0.0f);
     }
 
-    if (inputPlace && placeCooldown <= 0.0f) {
+    if (inputPlace.load() && placeCooldown.load() <= 0.0f) {
         if (hit.px == hit.bx && hit.py == hit.by && hit.pz == hit.bz) {
-            // inside same block? No adjacent valid
             return;
         }
 
-        uint16_t selectedItem = inventory[selectedHotbarSlot + 27].itemId;
+        uint16_t selectedItem;
+        {
+            std::lock_guard<std::mutex> lock(inventoryMutex);
+            selectedItem = inventory[selectedHotbarSlot + 27].itemId;
+        }
+
         if (selectedItem != 0 && (Registry::getItem(selectedItem).blockId != 0)) {
             int pcx = hit.px / CHUNK_SIZE;
             int pcz = hit.pz / CHUNK_SIZE;
@@ -147,10 +158,13 @@ void tickInteraction(float dt) {
             int plz = (hit.pz % CHUNK_SIZE + CHUNK_SIZE) % CHUNK_SIZE;
 
             if (hit.py >= 0 && hit.py < CHUNK_HEIGHT) {
-                glm::vec3 pSize = isCrouching ? glm::vec3(0.6f, 1.5f, 0.6f) : glm::vec3(0.6f, 1.8f, 0.6f);
-                bool intersectX = abs(playerX - (hit.px + 0.5f)) * 2.0f < (pSize.x + 1.0f);
-                bool intersectY = abs((playerY + pSize.y/2.0f) - (hit.py + 0.5f)) * 2.0f < (pSize.y + 1.0f);
-                bool intersectZ = abs(playerZ - (hit.pz + 0.5f)) * 2.0f < (pSize.z + 1.0f);
+                glm::vec3 pSize = isCrouching.load() ? glm::vec3(0.6f, 1.5f, 0.6f) : glm::vec3(0.6f, 1.8f, 0.6f);
+                float pX = playerX.load();
+                float pY = playerY.load();
+                float pZ = playerZ.load();
+                bool intersectX = abs(pX - (hit.px + 0.5f)) * 2.0f < (pSize.x + 1.0f);
+                bool intersectY = abs((pY + pSize.y/2.0f) - (hit.py + 0.5f)) * 2.0f < (pSize.y + 1.0f);
+                bool intersectZ = abs(pZ - (hit.pz + 0.5f)) * 2.0f < (pSize.z + 1.0f);
                 
                 if (!(intersectX && intersectY && intersectZ)) {
                     std::lock_guard<std::mutex> lock(worldMutex);
@@ -163,7 +177,7 @@ void tickInteraction(float dt) {
                         if (plz == 0 && chunks.find({pcx, pcz-1}) != chunks.end()) chunks[{pcx, pcz-1}].isDirty = true;
                         if (plz == CHUNK_SIZE-1 && chunks.find({pcx, pcz+1}) != chunks.end()) chunks[{pcx, pcz+1}].isDirty = true;
                         consumeItem(selectedHotbarSlot + 27, 1);
-                        placeCooldown = 0.2f;
+                        placeCooldown.store(0.2f);
                         workerCV.notify_one();
                     }
                 }
