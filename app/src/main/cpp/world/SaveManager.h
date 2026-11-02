@@ -5,6 +5,6 @@ namespace SaveManager {
     void Init(const std::string& path);
     bool HasSave();
     void SaveGame();
-    void LoadGame();
+    bool LoadGame();
     void NewGame();
 }

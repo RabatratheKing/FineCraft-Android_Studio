@@ -36,7 +36,6 @@ Java_com_example_MainActivity_nativeSurfaceCreated(JNIEnv* env, jclass clazz, jo
     }
     
     if (!isRunning.load()) {
-        initInventory();
         isRunning = true;
         isSimulationActive = true;
         renderThread = std::thread(renderLoop);

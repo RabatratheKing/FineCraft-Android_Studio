@@ -17,17 +17,20 @@ extern std::atomic<bool> isInventoryOpen;
 
 void initInventory();
 bool addItem(uint16_t itemId, uint16_t count);
+bool addItemUnlocked(uint16_t itemId, uint16_t count);
 bool consumeItem(int slotIndex, uint16_t count);
 void swapSlots(int slotA, int slotB);
 
-const ItemDefinition& getBlockMetadata(uint16_t id); // Keeping this for backward compatibility
+const ItemDefinition& getBlockMetadata(uint16_t id);
 
 extern InventorySlot craftingGrid[4];
 extern InventorySlot craftingOutput;
 
 void updateCraftingOutput();
+void updateCraftingOutputUnlocked();
 void takeCraftingOutput();
-void swapCraftingSlot(int invSlot, int craftSlot); // Moves item between inv and 2x2 grid
+void swapCraftingSlot(int invSlot, int craftSlot);
 void swapCraftingToCrafting(int craftSlotA, int craftSlotB);
 bool moveItems(int srcType, int srcSlot, int destType, int destSlot, int amount);
-void clearCraftingGrid(); // put items back to inventory if closed
+void clearCraftingGrid();
+void clearCraftingGridUnlocked();

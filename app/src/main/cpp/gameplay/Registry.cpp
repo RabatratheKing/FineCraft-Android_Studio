@@ -147,6 +147,27 @@ void Registry::init() {
         LOGE("Failed to read blocks.json");
     }
 
+    // Ensure all built-in preset IDs 1-15 are registered with safe fallbacks
+    for (const auto& pair : preset_ids) {
+        std::string identifier = pair.first;
+        uint16_t bId = pair.second;
+        if (blocks.find(bId) == blocks.end()) {
+            int texTop = getTex(identifier + "_top");
+            int texBottom = getTex(identifier + "_bottom");
+            int texSide = getTex(identifier + "_side");
+            int texAll = getTex(identifier);
+            if (identifier == "water") texAll = getTex("water_still");
+            int top = texTop != 4095 ? texTop : (texAll != 4095 ? texAll : 0);
+            int bottom = texBottom != 4095 ? texBottom : (texAll != 4095 ? texAll : 0);
+            int side = texSide != 4095 ? texSide : (texAll != 4095 ? texAll : 0);
+            bool opaque = (identifier != "oak_leaves" && identifier != "glass" && identifier != "water");
+            bool solid = (identifier != "water");
+            registerBlock(bId, identifier, identifier, top, bottom, side, opaque, solid);
+            registerItem(bId, identifier, identifier, top != 4095 ? top : 0, 64, bId);
+            LOGI("Fallback registered built-in block ID %d: %s", bId, identifier.c_str());
+        }
+    }
+
     std::string itemsStr = readAsset("items.json");
     if (!itemsStr.empty()) {
         try {

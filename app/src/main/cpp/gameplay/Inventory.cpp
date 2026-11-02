@@ -45,49 +45,51 @@ const ItemDefinition& getBlockMetadata(uint16_t id) {
     return Registry::getItem(id);
 }
 
-bool addItem(uint16_t itemId, uint16_t count) {
-    std::lock_guard<std::mutex> lock(inventoryMutex);
+bool addItemUnlocked(uint16_t itemId, uint16_t count) {
     if (itemId == 0 || count == 0) return false;
     uint16_t maxStack = getBlockMetadata(itemId).maxStack;
     if (maxStack == 0) return false;
 
+    // Transactional check: simulate adding across inventory slots using temp copy
+    InventorySlot tempInv[INVENTORY_SIZE];
+    for (int i = 0; i < INVENTORY_SIZE; i++) {
+        tempInv[i] = inventory[i];
+    }
+
     uint16_t remaining = count;
-
-    // First pass: try to add to existing partial stacks
-    for (int i = 0; i < INVENTORY_SIZE; i++) {
-        if (inventory[i].itemId == itemId && inventory[i].count < maxStack) {
-            uint16_t space = maxStack - inventory[i].count;
-            if (remaining <= space) {
-                inventory[i].count += remaining;
-                inventoryVersion++;
-                return true;
-            } else {
-                inventory[i].count += space;
-                remaining -= space;
-            }
+    // Pass 1: existing partial stacks
+    for (int i = 0; i < INVENTORY_SIZE && remaining > 0; i++) {
+        if (tempInv[i].itemId == itemId && tempInv[i].count < maxStack) {
+            uint16_t space = maxStack - tempInv[i].count;
+            uint16_t take = std::min(remaining, space);
+            tempInv[i].count += take;
+            remaining -= take;
+        }
+    }
+    // Pass 2: empty slots
+    for (int i = 0; i < INVENTORY_SIZE && remaining > 0; i++) {
+        if (tempInv[i].itemId == 0 || tempInv[i].count == 0) {
+            uint16_t take = std::min(remaining, maxStack);
+            tempInv[i].itemId = itemId;
+            tempInv[i].count = take;
+            remaining -= take;
         }
     }
 
-    // Second pass: find empty slots
-    for (int i = 0; i < INVENTORY_SIZE; i++) {
-        if (inventory[i].count == 0 || inventory[i].itemId == 0) {
-            if (remaining <= maxStack) {
-                inventory[i].itemId = itemId;
-                inventory[i].count = remaining;
-                inventoryVersion++;
-                return true;
-            } else {
-                inventory[i].itemId = itemId;
-                inventory[i].count = maxStack;
-                remaining -= maxStack;
-            }
+    if (remaining == 0) {
+        // Commit changes
+        for (int i = 0; i < INVENTORY_SIZE; i++) {
+            inventory[i] = tempInv[i];
         }
+        inventoryVersion++;
+        return true;
     }
+    return false; // Transaction failed: inventory not modified
+}
 
-    if (remaining < count) {
-        inventoryVersion++; // partial add succeeded
-    }
-    return remaining == 0;
+bool addItem(uint16_t itemId, uint16_t count) {
+    std::lock_guard<std::mutex> lock(inventoryMutex);
+    return addItemUnlocked(itemId, count);
 }
 
 bool consumeItem(int slotIndex, uint16_t count) {
@@ -134,7 +136,7 @@ void swapSlots(int slotA, int slotB) {
 InventorySlot craftingGrid[4] = {{0,0}, {0,0}, {0,0}, {0,0}};
 InventorySlot craftingOutput = {0,0};
 
-void updateCraftingOutput() {
+void updateCraftingOutputUnlocked() {
     int woodCount = 0;
     int planksCount = 0;
     int otherCount = 0;
@@ -156,22 +158,20 @@ void updateCraftingOutput() {
     }
 }
 
+void updateCraftingOutput() {
+    std::lock_guard<std::mutex> lock(inventoryMutex);
+    updateCraftingOutputUnlocked();
+}
+
 void takeCraftingOutput() {
     std::lock_guard<std::mutex> lock(inventoryMutex);
-    updateCraftingOutput();
+    updateCraftingOutputUnlocked();
     if(craftingOutput.itemId != 0) {
         uint16_t outId = craftingOutput.itemId;
         uint16_t outCount = craftingOutput.count;
 
-        // Test if inventory can fit the crafted item
-        // We simulate adding without mutating yet
-        bool canFit = false;
-        {
-            // Simple check: test add on inventory copy or check space
-            canFit = addItem(outId, outCount);
-        }
-        if (canFit) {
-            // consume ingredients
+        // Transactional add: ensure entire output fits before consuming ingredients
+        if (addItemUnlocked(outId, outCount)) {
             if(outId == 7) { // wood -> planks
                 int needed = 1;
                 for(int i=0; i<4 && needed>0; i++) {
@@ -193,7 +193,7 @@ void takeCraftingOutput() {
                     }
                 }
             }
-            updateCraftingOutput();
+            updateCraftingOutputUnlocked();
             inventoryVersion++;
         }
     }
@@ -215,7 +215,7 @@ void swapCraftingSlot(int invSlot, int craftSlot) {
                 craftingGrid[craftSlot].count += space;
                 inventory[invSlot].count -= space;
             }
-            updateCraftingOutput();
+            updateCraftingOutputUnlocked();
             inventoryVersion++;
             return;
         }
@@ -224,7 +224,7 @@ void swapCraftingSlot(int invSlot, int craftSlot) {
     InventorySlot temp = inventory[invSlot];
     inventory[invSlot] = craftingGrid[craftSlot];
     craftingGrid[craftSlot] = temp;
-    updateCraftingOutput();
+    updateCraftingOutputUnlocked();
     inventoryVersion++;
 }
 
@@ -234,12 +234,11 @@ void swapCraftingToCrafting(int craftSlotA, int craftSlotB) {
     InventorySlot temp = craftingGrid[craftSlotA];
     craftingGrid[craftSlotA] = craftingGrid[craftSlotB];
     craftingGrid[craftSlotB] = temp;
-    updateCraftingOutput();
+    updateCraftingOutputUnlocked();
     inventoryVersion++;
 }
 
-void clearCraftingGrid() {
-    std::lock_guard<std::mutex> lock(inventoryMutex);
+void clearCraftingGridUnlocked() {
     for(int i=0; i<4; i++) {
         if(craftingGrid[i].itemId != 0 && craftingGrid[i].count > 0) {
             uint16_t id = craftingGrid[i].itemId;
@@ -247,7 +246,6 @@ void clearCraftingGrid() {
             uint16_t maxStack = getBlockMetadata(id).maxStack;
             if (maxStack == 0) maxStack = 64;
 
-            // Try to add to inventory slots
             uint16_t remaining = count;
             for (int s = 0; s < INVENTORY_SIZE && remaining > 0; s++) {
                 if (inventory[s].itemId == id && inventory[s].count < maxStack) {
@@ -265,7 +263,6 @@ void clearCraftingGrid() {
                     remaining -= take;
                 }
             }
-            // Non-destructive: only clear if fully transferred, otherwise retain remainder
             if (remaining == 0) {
                 craftingGrid[i] = {0, 0};
             } else {
@@ -273,8 +270,13 @@ void clearCraftingGrid() {
             }
         }
     }
-    updateCraftingOutput();
+    updateCraftingOutputUnlocked();
     inventoryVersion++;
+}
+
+void clearCraftingGrid() {
+    std::lock_guard<std::mutex> lock(inventoryMutex);
+    clearCraftingGridUnlocked();
 }
 
 bool moveItems(int srcType, int srcSlot, int destType, int destSlot, int amount) {
@@ -308,7 +310,7 @@ bool moveItems(int srcType, int srcSlot, int destType, int destSlot, int amount)
         dest->count = amount;
         src->count -= amount;
         if (src->count == 0) src->itemId = 0;
-        updateCraftingOutput();
+        updateCraftingOutputUnlocked();
         inventoryVersion++;
         return true;
     } else if (dest->itemId == src->itemId) {
@@ -319,7 +321,7 @@ bool moveItems(int srcType, int srcSlot, int destType, int destSlot, int amount)
             dest->count += move;
             src->count -= move;
             if (src->count == 0) src->itemId = 0;
-            updateCraftingOutput();
+            updateCraftingOutputUnlocked();
             inventoryVersion++;
             return true;
         }

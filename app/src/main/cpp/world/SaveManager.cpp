@@ -42,7 +42,6 @@ namespace SaveManager {
         uint32_t version = 2;
         out.write((char*)&version, sizeof(version));
         
-        // Globals (thread-safe snapshot loads)
         int seed = worldSeed.load();
         float pX = playerX.load();
         float pY = playerY.load();
@@ -60,12 +59,10 @@ namespace SaveManager {
         out.write((char*)&cLookY, sizeof(cLookY));
         out.write((char*)&tOfDay, sizeof(tOfDay));
         
-        // Protect inventory snapshot with mutex
         InventorySlot invCopy[INVENTORY_SIZE];
         InventorySlot craftCopy[4];
         {
             std::lock_guard<std::mutex> lock(inventoryMutex);
-            clearCraftingGrid(); // Safe non-destructive return to inventory
             for (int i = 0; i < INVENTORY_SIZE; i++) {
                 invCopy[i] = inventory[i];
             }
@@ -74,20 +71,17 @@ namespace SaveManager {
             }
         }
 
-        // Write Inventory (36 slots)
         for (int i = 0; i < INVENTORY_SIZE; i++) {
             out.write((char*)&invCopy[i].itemId, sizeof(uint16_t));
             out.write((char*)&invCopy[i].count, sizeof(uint16_t));
         }
         out.write((char*)&hotbar, sizeof(hotbar));
 
-        // Write Crafting Grid (4 slots) - Version 2 addition
         for (int i = 0; i < 4; i++) {
             out.write((char*)&craftCopy[i].itemId, sizeof(uint16_t));
             out.write((char*)&craftCopy[i].count, sizeof(uint16_t));
         }
         
-        // Chunks
         std::vector<std::pair<ChunkPos, std::vector<uint8_t>>> chunksToSave;
         {
             std::lock_guard<std::mutex> lock(worldMutex);
@@ -125,27 +119,33 @@ namespace SaveManager {
         }
     }
 
-    void LoadGame() {
-        if (saveFilePath.empty()) return;
+    bool LoadGame() {
+        if (saveFilePath.empty()) {
+            NewGame();
+            return false;
+        }
         
         std::ifstream in(saveFilePath, std::ios::binary);
         if (!in) {
-            LOGE("Failed to open save file for reading");
-            return;
+            LOGE("Failed to open save file for reading, starting new game");
+            NewGame();
+            return false;
         }
         
         char magic[4];
         in.read(magic, 4);
         if (!in || magic[0] != 'F' || magic[1] != 'I' || magic[2] != 'N' || magic[3] != 'C') {
-            LOGE("Invalid save file magic");
-            return;
+            LOGE("Invalid save file magic, starting new game");
+            NewGame();
+            return false;
         }
         
         uint32_t version;
         in.read((char*)&version, sizeof(version));
         if (!in || (version != 1 && version != 2)) {
-            LOGE("Unsupported save file version: %u", version);
-            return;
+            LOGE("Unsupported save file version: %u, starting new game", version);
+            NewGame();
+            return false;
         }
 
         int loadedSeed;
@@ -163,11 +163,11 @@ namespace SaveManager {
         in.read((char*)&loadedTimeOfDay, sizeof(loadedTimeOfDay));
 
         if (!in) {
-            LOGE("Corrupt save file reading globals");
-            return;
+            LOGE("Corrupt save file reading globals, starting new game");
+            NewGame();
+            return false;
         }
 
-        // Validate coordinates
         if (std::isnan(loadedPX) || std::isnan(loadedPY) || std::isnan(loadedPZ) || loadedPY < -50.0f || loadedPY > 500.0f) {
             loadedPX = 0.0f; loadedPY = 16.0f; loadedPZ = 0.0f;
         }
@@ -180,8 +180,9 @@ namespace SaveManager {
             in.read((char*)&loadedInv[i].itemId, sizeof(uint16_t));
             in.read((char*)&loadedInv[i].count, sizeof(uint16_t));
             if (!in) {
-                LOGE("Corrupt save file reading inventory");
-                return;
+                LOGE("Corrupt save file reading inventory, starting new game");
+                NewGame();
+                return false;
             }
             if (loadedInv[i].itemId > 5000 || loadedInv[i].count > 64) {
                 loadedInv[i] = {0, 0};
@@ -189,8 +190,9 @@ namespace SaveManager {
         }
         in.read((char*)&loadedHotbar, sizeof(loadedHotbar));
         if (!in) {
-            LOGE("Corrupt save file reading hotbar slot");
-            return;
+            LOGE("Corrupt save file reading hotbar slot, starting new game");
+            NewGame();
+            return false;
         }
         if (loadedHotbar < 0 || loadedHotbar >= HOTBAR_SIZE) loadedHotbar = 0;
 
@@ -200,8 +202,9 @@ namespace SaveManager {
                 in.read((char*)&loadedCraft[i].itemId, sizeof(uint16_t));
                 in.read((char*)&loadedCraft[i].count, sizeof(uint16_t));
                 if (!in) {
-                    LOGE("Corrupt save file reading crafting grid");
-                    return;
+                    LOGE("Corrupt save file reading crafting grid, starting new game");
+                    NewGame();
+                    return false;
                 }
                 if (loadedCraft[i].itemId > 5000 || loadedCraft[i].count > 64) {
                     loadedCraft[i] = {0, 0};
@@ -212,8 +215,9 @@ namespace SaveManager {
         uint32_t numChunks;
         in.read((char*)&numChunks, sizeof(numChunks));
         if (!in || numChunks > 1024) {
-            LOGE("Corrupt save file: invalid chunk count %u", numChunks);
-            return;
+            LOGE("Corrupt save file: invalid chunk count %u, starting new game", numChunks);
+            NewGame();
+            return false;
         }
 
         struct LoadedChunkTemp {
@@ -228,21 +232,22 @@ namespace SaveManager {
             in.read((char*)&cx, sizeof(int));
             in.read((char*)&cz, sizeof(int));
             if (!in) {
-                LOGE("Corrupt save file reading chunk coords");
-                return;
+                LOGE("Corrupt save file reading chunk coords, starting new game");
+                NewGame();
+                return false;
             }
             if (abs(cx) > 1000 || abs(cz) > 1000) {
-                // Skip invalid chunk
                 in.seekg(CHUNK_SIZE * CHUNK_HEIGHT * CHUNK_SIZE, std::ios::cur);
                 continue;
             }
-            LoadedChunkTemp cTemp;
+            LoadedChunkTemp cTemp{};
             cTemp.cx = cx;
             cTemp.cz = cz;
             in.read((char*)cTemp.data, CHUNK_SIZE * CHUNK_HEIGHT * CHUNK_SIZE);
             if (!in) {
-                LOGE("Corrupt save file reading chunk data");
-                return;
+                LOGE("Corrupt save file reading chunk data, starting new game");
+                NewGame();
+                return false;
             }
             loadedChunks.push_back(cTemp);
         }
@@ -265,7 +270,7 @@ namespace SaveManager {
             for (int i = 0; i < 4; i++) {
                 craftingGrid[i] = loadedCraft[i];
             }
-            updateCraftingOutput();
+            updateCraftingOutputUnlocked();
             inventoryVersion++;
         }
 
@@ -290,6 +295,7 @@ namespace SaveManager {
         }
         
         LOGI("Game loaded successfully (version %u)", version);
+        return true;
     }
 
     void NewGame() {
