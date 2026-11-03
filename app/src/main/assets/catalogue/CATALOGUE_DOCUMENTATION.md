@@ -4,7 +4,7 @@ This is a data-only foundation for future FineCraft block work. It does not chan
 
 ## Source and reproducibility
 
-The base registry source is [Complexity-ML/minecraft-data-26.2](https://github.com/Complexity-ML/minecraft-data-26.2), Java Edition data at `data/pc/26.2`, pinned to commit `2a6a5fd9ebb0d964a73312d11beef596b7ec029b`. It contains **1,196** blocks. The four source JSON files are copied unchanged into `tools/catalogue/source/`; SHA-256 digests and byte lengths are in `source_manifest.json`.
+The base registry source is [Complexity-ML/minecraft-data-26.2](https://github.com/Complexity-ML/minecraft-data-26.2), Java Edition data at `data/pc/26.2`, pinned to commit `2a6a5fd9ebb0d964a73312d11beef596b7ec029b`. It contains **1,196** blocks. The four source JSON files are pinned to these upstream Git blob IDs: `blocks.json` `0d30a3bb8ffb00d98411702562d75be57e6a1844`, `blockCollisionShapes.json` `843603a3ac83ab7fb8af01469722eec42b70609a`, `materials.json` `07297f08557bc0b15c9a0177e2487924745d6653`, and `items.json` `b79e6b5d79e74bf4589f48d55bb6cf4fc3215be6`. Hashes and byte lengths are calculated from canonical LF bytes, so Windows CRLF checkouts produce the same manifest. The validator checks the local content against all four pinned Git blob IDs and the manifest values.
 
 Additional authority for this QA pass is Mojang's Java 26.2 server report output (`blocks.json`, `registries.json`) and official client blockstate/model assets. The server jar SHA-1 is `823e2250d24b3ddac457a60c92a6a941943fcd6a`; the client jar SHA-1 is `2dc72797acbc1b63fc16a11c4ac393605f453754`. The compact model index is reproducibly extracted by `tools/catalogue/extract_mojang_client_geometry.py` from the official client jar. Hashes and provenance are recorded in `source_manifest.json`. No client textures are copied.
 
@@ -41,7 +41,13 @@ Schema version 2 separates dimensions. `classification.primary_geometry` contain
 
 Model element bounds support this coarse geometry classification; they do not alone prove pixel output, render layer, selection shape, or runtime neighbor behavior. A full cube means a referenced model variant includes a full 16×16×16 model element; partial geometry means model elements do not satisfy that test. `fluid` follows the official server block definition. The model index has complete blockstate and model-reference coverage for the catalogue.
 
-Behavior tags are independent of geometry. `transparent` reflects the upstream block flag and is not an assertion about alpha or renderer translucency. `translucent` remains unresolved. Collision tags indicate any mapped state with that collision kind; a block may have multiple tags as states differ. Light emission and filtering remain exact numeric fields. Unknown values are explicit and are never treated as false.
+Behavior tags are independent of geometry and each tag has a confidence/evidence entry in `block_behaviours.json`:
+
+- **Verified from source data:** `full_collision`, `partial_collision`, `empty_collision`, `compound_collision`, `transparent`, `light_emitter`, `waterloggable`, `block_entity`, and `fluid`. These tags are direct registry/model/collision evidence or deterministic summaries of those fields. `transparent` is not alpha or render-layer evidence; `waterloggable` means the state schema declares `waterlogged`.
+- **Inferred from curated names/rules:** `gravity_affected`, `multi_block`, `slippery`, `bouncy`, `damaging`, `technical`, and `special_rendering`. These are useful catalogue hints, not complete game-mechanics proofs.
+- **Incomplete/provisional:** `support_dependent`, `interactive`, `redstone_component`, `plant`, `animated`, `translucent`, and `flammable`. The manually assigned lists are incomplete or lack a source field. In particular, support tags are provisional candidates: `support.confidence` is `incomplete`, `mechanics_complete` is false, and requirements are not presented as a complete specification.
+
+Collision tags indicate any mapped state with that collision kind; a block may have multiple tags as states differ. Light emission and filtering remain exact numeric fields. Unknown values are explicit and are never treated as false.
 
 ## Geometry and known gaps
 
@@ -51,7 +57,7 @@ Official server reports match all 32,366 state IDs and 2,060 state properties. T
 
 Exact interaction details, placement/support rules, neighbor-update behavior, selection geometry, render layer/translucency and flammability are not expressed by the available registry/model reports; the audit lists each affected block and the required evidence. Their absence is not treated as proof that a behavior/property is absent.
 
-Block entity types are mapped by matching the official block report kind to the official entity-type registry, with explicit kind aliases recorded in the generator. Every registered entity type maps to at least one block. Beds have no block entity in this version and retain head/foot states.
+Block entity types are mapped by matching the official block report kind to the official entity-type registry, with explicit kind aliases recorded in the generator. Exactly 186 mapped blocks carry the `block_entity` behavior tag; the behavior category, master metadata, and `blocks_with_block_entity_metadata` statistic are validated against that same mapping. Every registered entity type maps to at least one block. Beds have no block entity in this version and retain head/foot states.
 
 ## 26.2 mechanics recorded
 

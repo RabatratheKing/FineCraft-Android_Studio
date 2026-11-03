@@ -8,6 +8,7 @@
   "state_property_count": 2060,
   "errors": [],
   "warnings": [
+    "Manually assigned behavior tags are marked inferred or incomplete in block_behaviours.json; support-dependent tags are provisional candidates, not complete mechanics.",
     "Model geometry describes blockstate model element bounds; it does not prove in-game render layer, transparency, selection shape, or animation.",
     "Unknown support, interaction, neighbor-update, translucency, and flammability fields require behavior/runtime sources and are not interpreted as false."
   ],
@@ -7414,6 +7415,12 @@
     }
   },
   "checks": {
+    "source_manifest": {
+      "line_endings": "LF",
+      "pinned_source_files": 4,
+      "verified_git_blobs": 4,
+      "errors": []
+    },
     "official_state_IDs_and_properties": {
       "states_compared": 32366,
       "properties_compared": 2060,
@@ -7444,7 +7451,11 @@
       "registry_types": 49,
       "types_mapped_to_blocks": 49,
       "blocks_with_type": 186,
-      "known_absent_blocks": 1010
+      "block_entity_tag_count": 186,
+      "category_membership_count": 186,
+      "statistics_count": 186,
+      "known_absent_blocks": 1010,
+      "all_mapping_tag_category_stat_sets_match": true
     },
     "item_relationships": {
       "exact_name_items": 1042,
@@ -7456,6 +7467,17 @@
       "official_item_block_state_components": 12,
       "components_overlap_missing_exact_name": 0,
       "total_blocks": 1196
+    },
+    "behavior_tag_confidence": {
+      "declared_tags": 23,
+      "assigned_tags": 21,
+      "confidence_counts": {
+        "verified": 9,
+        "inferred": 7,
+        "incomplete": 7
+      },
+      "support_candidates_marked_incomplete": true,
+      "support_candidate_count": 31
     },
     "classification_consistency": {
       "geometry_classes": {

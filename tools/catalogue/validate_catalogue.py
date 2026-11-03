@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """Audit catalogue, Minecraft 26.2 server/client evidence, collisions and state coverage."""
 from __future__ import annotations
-import argparse, json, math, sys
+import argparse, hashlib, json, math, sys
 from collections import Counter
 from pathlib import Path
-from generate_catalogue import (BEHAVIOUR_TAGS, DEFAULT_OUTPUT, DEFAULT_SOURCE, GEOMETRY_CLASSES,
-                                SOURCE_COMMIT, build, stable_json)
+from generate_catalogue import (BEHAVIOUR_TAGS, BEHAVIOUR_TAG_CONFIDENCE, DEFAULT_OUTPUT, DEFAULT_SOURCE, GEOMETRY_CLASSES,
+                                SOURCE_COMMIT, SOURCE_GIT_BLOBS, build, canonical_file_bytes, git_blob_sha1, stable_json)
 
 def load(path): return json.loads(path.read_text(encoding="utf-8"))
 def main():
@@ -14,6 +14,16 @@ def main():
     errors=[]; warnings=[]; checks={}
     src=load(a.source_dir/"blocks.json"); coll=load(a.source_dir/"blockCollisionShapes.json"); official=load(official_dir/"blocks.json"); regs=load(official_dir/"registries.json"); models=load(official_dir/"client_geometry.json")
     out=build(a.source_dir); master=out["blocks_master.json"]; defs=master["blocks"]; by_name={e["registry"]["internal_name"]:e for e in defs}
+    manifest=out["source_manifest.json"]; manifest_errors=[]
+    for filename, expected_blob in SOURCE_GIT_BLOBS.items():
+        path=a.source_dir/filename; content=canonical_file_bytes(path); actual_blob=git_blob_sha1(content)
+        entry=manifest.get("files",{}).get(filename,{})
+        if actual_blob != expected_blob: manifest_errors.append(f"{filename}: Git blob {actual_blob} != pinned {expected_blob}")
+        if entry.get("git_blob_sha1") != actual_blob or entry.get("bytes") != len(content) or entry.get("sha256") != hashlib.sha256(content).hexdigest():
+            manifest_errors.append(f"{filename}: manifest hash/length does not match canonical LF content")
+    if manifest.get("line_endings") != "LF": manifest_errors.append("manifest line_endings must be LF")
+    if manifest_errors: errors.extend(manifest_errors)
+    checks["source_manifest"]={"line_endings":manifest.get("line_endings"),"pinned_source_files":len(SOURCE_GIT_BLOBS),"verified_git_blobs":sum(1 for filename,blob in SOURCE_GIT_BLOBS.items() if manifest.get("files",{}).get(filename,{}).get("git_blob_sha1")==blob),"errors":manifest_errors}
     src_by={b["name"]:b for b in src}; official_by={k.split(":",1)[1]:v for k,v in official.items()}
     if len(defs)!=len(src) or set(by_name)!=set(src_by): errors.append("block registry count/identifier coverage differs from source")
     ids=[e["registry"]["id"] for e in defs]; names=[e["registry"]["identifier"] for e in defs]
@@ -84,7 +94,18 @@ def main():
     mapped={b["block_entity"]["type"] for b in out["block_behaviours.json"]["blocks"] if b["block_entity"]["type"]}
     registry_entities=set(regs["minecraft:block_entity_type"]["entries"])
     if mapped!=registry_entities: errors.append(f"block entity registry coverage differs: missing={sorted(registry_entities-mapped)}, extra={sorted(mapped-registry_entities)}")
-    checks["block_entities"]={"registry_types":len(registry_entities),"types_mapped_to_blocks":len(mapped),"blocks_with_type":sum(bool(e["block_entity"]["type"]) for e in defs),"known_absent_blocks":sum(not e["block_entity"]["type"] for e in defs)}
+    behaviour_by_name={b["identifier"].split(":",1)[1]:b for b in out["block_behaviours.json"]["blocks"]}
+    mapped_ids={"minecraft:"+name for name,e in by_name.items() if e.get("block_entity",{}).get("type") is not None}
+    tagged_ids={"minecraft:"+name for name,b in behaviour_by_name.items() if "block_entity" in b["tags"]}
+    category_ids=set(out["blocks_by_category.json"]["behaviour_tags"].get("block_entity",[]))
+    mapped_behavior_ids={"minecraft:"+name for name,b in behaviour_by_name.items() if b.get("block_entity",{}).get("type") is not None}
+    metadata_count=sum(e.get("block_entity",{}).get("type") is not None for e in defs)
+    stat_count=out["catalogue_statistics.json"].get("blocks_with_block_entity_metadata")
+    if not (metadata_count==len(mapped_ids)==len(tagged_ids)==len(category_ids)==len(mapped_behavior_ids)==stat_count==186):
+        errors.append(f"block entity metadata/tag/stat mismatch: metadata={metadata_count}, tagged={len(tagged_ids)}, category={len(category_ids)}, behavior_mapped={len(mapped_behavior_ids)}, stat={stat_count}")
+    if tagged_ids != mapped_ids or category_ids != mapped_ids or mapped_behavior_ids != mapped_ids:
+        errors.append("block_entity tags, behavior metadata, category membership, and master block mappings differ")
+    checks["block_entities"]={"registry_types":len(registry_entities),"types_mapped_to_blocks":len(mapped),"blocks_with_type":metadata_count,"block_entity_tag_count":len(tagged_ids),"category_membership_count":len(category_ids),"statistics_count":stat_count,"known_absent_blocks":sum(not e["block_entity"]["type"] for e in defs),"all_mapping_tag_category_stat_sets_match":mapped_ids==tagged_ids==category_ids==mapped_behavior_ids and stat_count==metadata_count}
     # Item relation counts are evidence labels only, no guessed aliases are promoted.
     item_report=out["block_item_relationships.json"]; component_items=set(item_report["official_item_block_state_components"]); missing_names={x["block"] for x in item_report["blocks"] if x["status"]=="no_exact_name_item"};
     if len(component_items)!=12 or any(name not in {"minecraft:"+n for n in by_name} for name in component_items) or component_items & missing_names: errors.append("official item block_state component evidence inconsistent")
@@ -95,6 +116,13 @@ def main():
     for name,geom,tag in [("sand","full_cube","gravity_affected"),("glowstone","full_cube","light_emitter"),("torch","partial_geometry","support_dependent")]:
         e=by_name.get(name); tags=next(b["tags"] for b in out["block_behaviours.json"]["blocks"] if b["identifier"]=="minecraft:"+name)
         if not e or e["classification"]["primary_geometry"]!=geom or tag not in tags:errors.append(f"independent geometry/behavior example failed: {name}")
+    behaviour_confidence=out["block_behaviours.json"].get("tag_confidence",{})
+    actual_tags={tag for b in out["block_behaviours.json"]["blocks"] for tag in b["tags"]}
+    if set(behaviour_confidence)!=BEHAVIOUR_TAGS or not actual_tags<=set(behaviour_confidence): errors.append("behavior tag confidence metadata does not cover declared tags")
+    confidence_counts={level:sum(1 for entry in behaviour_confidence.values() if entry["confidence"]==level) for level in ("verified","inferred","incomplete")}
+    support_problems=[b["identifier"] for b in out["block_behaviours.json"]["blocks"] if b.get("support",{}).get("dependent") is True and (b.get("support",{}).get("confidence")!="incomplete" or b.get("support",{}).get("mechanics_complete") is not False)]
+    if support_problems: errors.append(f"provisional support tags lack incomplete-mechanics marker: {support_problems[:10]}")
+    checks["behavior_tag_confidence"]={"declared_tags":len(behaviour_confidence),"assigned_tags":len(actual_tags),"confidence_counts":confidence_counts,"support_candidates_marked_incomplete":not support_problems,"support_candidate_count":sum("support_dependent" in b["tags"] for b in out["block_behaviours.json"]["blocks"])}
     checks["classification_consistency"]={"geometry_classes":out["catalogue_audit.json"]["classification_consistency"]["geometry_classes"],"exactly_one_per_block":True,"gravity_is_behavior_only":"gravity_affected" not in master["classification_values"]}
     # Reproducible generation and files on disk.
     first={k:stable_json(v) for k,v in out.items()}; second={k:stable_json(v) for k,v in build(a.source_dir).items()}

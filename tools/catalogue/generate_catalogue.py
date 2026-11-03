@@ -12,8 +12,39 @@ DEFAULT_OUTPUT = REPO / "app/src/main/assets/catalogue"
 SOURCE_REPO = "https://github.com/Complexity-ML/minecraft-data-26.2"
 SOURCE_COMMIT = "2a6a5fd9ebb0d964a73312d11beef596b7ec029b"
 SOURCE_DATA_PATH = "data/pc/26.2"
+SOURCE_GIT_BLOBS = {
+    "blocks.json": "0d30a3bb8ffb00d98411702562d75be57e6a1844",
+    "blockCollisionShapes.json": "843603a3ac83ab7fb8af01469722eec42b70609a",
+    "materials.json": "07297f08557bc0b15c9a0177e2487924745d6653",
+    "items.json": "b79e6b5d79e74bf4589f48d55bb6cf4fc3215be6",
+}
 CLASSIFICATIONS = {"full_cube", "gravity_affected", "partial_geometry", "multipart_structure", "non_solid", "fluid", "technical"}
 GEOMETRY_CLASSES = {"full_cube", "partial_geometry", "multipart_structure", "non_solid", "fluid"}
+BEHAVIOUR_TAG_CONFIDENCE = {
+    "full_collision": {"confidence": "verified", "basis": "At least one mapped state has a source collision shape consisting of the full unit box.", "limitations": "Describes collision boxes, not selection or render geometry."},
+    "partial_collision": {"confidence": "verified", "basis": "At least one mapped state has a non-empty, non-unit collision shape.", "limitations": "Describes collision boxes, not selection or render geometry."},
+    "empty_collision": {"confidence": "verified", "basis": "At least one mapped state has an empty source collision shape.", "limitations": "Does not imply that the block has no selection or interaction shape."},
+    "compound_collision": {"confidence": "verified", "basis": "At least one mapped state contains multiple source collision boxes.", "limitations": "Only the source collision decomposition is asserted."},
+    "transparent": {"confidence": "verified", "basis": "Copied from the pinned upstream transparent field.", "limitations": "Not a render-layer, alpha, or translucency claim."},
+    "light_emitter": {"confidence": "verified", "basis": "Official-source emitLight is greater than zero.", "limitations": "Exact emission remains in the numeric property."},
+    "waterloggable": {"confidence": "verified", "basis": "The official-source state schema declares a waterlogged property.", "limitations": "Presence of the state property does not describe all placement/update rules."},
+    "block_entity": {"confidence": "verified", "basis": "Official block kind maps to a registered 26.2 block_entity_type using the documented alias table.", "limitations": "Type mapping does not describe entity runtime behavior."},
+    "fluid": {"confidence": "verified", "basis": "Official server block definition type is liquid.", "limitations": "Does not describe fluid simulation behavior."},
+    "gravity_affected": {"confidence": "inferred", "basis": "Manually curated name list plus concrete_powder suffix rule.", "limitations": "Candidate tag only; full version-specific falling/breaking behavior is not validated."},
+    "multi_block": {"confidence": "inferred", "basis": "Manually curated block-name list, including named multipart blocks and sulfur_spike.", "limitations": "Not a complete scan of all multi-part or neighbor-linked blocks."},
+    "slippery": {"confidence": "inferred", "basis": "Manually curated block-name list.", "limitations": "Friction values and entity-specific behavior are not validated."},
+    "bouncy": {"confidence": "inferred", "basis": "Manually curated bed/slime name rule.", "limitations": "Bounce conditions and entity-specific behavior are not validated."},
+    "damaging": {"confidence": "inferred", "basis": "Manually curated block-name list.", "limitations": "Damage conditions and values are not validated."},
+    "technical": {"confidence": "inferred", "basis": "Manually curated technical block-name list.", "limitations": "A catalogue grouping, not a complete engine-level classification."},
+    "special_rendering": {"confidence": "inferred", "basis": "Manually curated block-name list.", "limitations": "Does not specify a verified render layer or pipeline behavior."},
+    "support_dependent": {"confidence": "incomplete", "basis": "Manually curated candidate names and sapling suffix rule.", "limitations": "Candidate list is incomplete and does not specify placement, survival, or neighbor-update mechanics."},
+    "interactive": {"confidence": "incomplete", "basis": "Manually curated name list and shulker-box suffix rule.", "limitations": "Not exhaustive; does not prove actual interaction behavior."},
+    "redstone_component": {"confidence": "incomplete", "basis": "Manually curated name list and button/pressure-plate suffix rules.", "limitations": "Not exhaustive and does not describe signal behavior."},
+    "plant": {"confidence": "incomplete", "basis": "Manually curated plant list and potted_ prefix rule.", "limitations": "Not an exhaustive botanical or placement classification."},
+    "animated": {"confidence": "incomplete", "basis": "Manually curated name list.", "limitations": "Not verified against runtime animation or model animation data."},
+    "translucent": {"confidence": "incomplete", "basis": "No positive assignments are generated.", "limitations": "Render alpha and layer information remain unresolved."},
+    "flammable": {"confidence": "incomplete", "basis": "No positive assignments are generated.", "limitations": "Fire-spread behavior remains unresolved."},
+}
 BEHAVIOUR_TAGS = {
     "gravity_affected", "support_dependent", "full_collision", "partial_collision", "empty_collision",
     "compound_collision", "transparent", "translucent", "light_emitter", "waterloggable", "interactive",
@@ -66,8 +97,18 @@ def read_json(path: Path):
 def stable_json(data) -> bytes:
     return (json.dumps(data, ensure_ascii=False, indent=2, sort_keys=False) + "\n").encode("utf-8")
 
+def canonical_lf_bytes(data: bytes) -> bytes:
+    """Canonicalize text line endings before hashing or measuring source content."""
+    return data.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+
+def canonical_file_bytes(path: Path) -> bytes:
+    return canonical_lf_bytes(path.read_bytes())
+
 def sha256(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+    return hashlib.sha256(canonical_file_bytes(path)).hexdigest()
+
+def git_blob_sha1(data: bytes) -> str:
+    return hashlib.sha1(b"blob " + str(len(data)).encode("ascii") + b"\0" + data).hexdigest()
 
 def expanded_states(block):
     states = []
@@ -132,7 +173,10 @@ def build(source: Path):
     manifest = {
         "repository": SOURCE_REPO, "commit": SOURCE_COMMIT, "data_path": SOURCE_DATA_PATH,
         "edition": "Minecraft Java Edition", "version": "26.2",
-        "files": {name: {"sha256": sha256(source / name), "bytes": (source / name).stat().st_size} for name in source_files}
+        "line_endings": "LF",
+        "files": {name: {"sha256": hashlib.sha256(canonical_file_bytes(source / name)).hexdigest(),
+                         "bytes": len(canonical_file_bytes(source / name)),
+                         "git_blob_sha1": git_blob_sha1(canonical_file_bytes(source / name))} for name in source_files}
     }
     definitions, behaviour, mappings = [], [], {}
     unresolved = {"render_geometry": [], "selection_geometry": [], "block_entity_type": [], "block_item_mapping": [],
@@ -224,7 +268,9 @@ def build(source: Path):
         beh = {"identifier": f"minecraft:{name}", "tags": sorted(tags),
                "gravity": {"affected": "gravity_affected" in tags, "falling_or_breaking_rule": "requires_version_specific_rule_lookup" if "gravity_affected" in tags else False},
                "support": {"dependent": True if "support_dependent" in tags else None,
-                           "requirements": "requires_version_specific_rule_lookup" if "support_dependent" in tags else "unknown"},
+                           "confidence": "incomplete" if "support_dependent" in tags else "unknown",
+                           "mechanics_complete": False,
+                           "requirements": "provisional_candidate_incomplete_rules" if "support_dependent" in tags else "unknown"},
                "lighting": {"emission": block.get("emitLight"), "filter": block.get("filterLight")},
                "waterlogging": any(prop.get("name") == "waterlogged" for prop in block.get("states", [])),
                "interaction": "requires_version_specific_rule_lookup" if "interactive" in tags else "unknown",
@@ -367,11 +413,12 @@ def enrich_outputs(output, source):
         entry["geometry"].update({"render_geometry":"model_elements" if bs else None,"render_model_count":len(refs),"render_model_identifiers":sorted(refs),"render_geometry_class":geom,"render_geometry_source":"official_26.2_client_blockstate_and_model_assets" if bs else None,"full_cube":geom=="full_cube","partial_geometry":geom=="partial_geometry","multipart_geometry":geom=="multipart_structure","neighbour_dependent":"unknown"})
         entry["collision"]["selection_shape"]="unknown_requires_outline_shape_extraction"
         beh=behavior_by_name[name]
+        entity=kind_to_entity.get(typ)
         tags=set(beh["tags"])
         if geom=="fluid": tags.add("fluid")
         if name in TECHNICAL_NAMES or name.endswith("_command_block"): tags.add("technical")
+        if entity: tags.add("block_entity")
         beh["tags"]=sorted(tags)
-        entity=kind_to_entity.get(typ)
         be_status="mapped" if entity else "known_absent"
         beh["block_entity"]={"status":be_status,"type":entity,"official_block_kind":official.get("definition",{}).get("type")}
         entry["block_entity"]={"status":be_status,"type":entity}
@@ -392,6 +439,7 @@ def enrich_outputs(output, source):
     for b in output["block_behaviours.json"]["blocks"]:
         for tag in b["tags"]: tags_catalog.setdefault(tag,[]).append(b["identifier"])
     output["blocks_by_category.json"]={"schema_version":2,"geometry_classes":cats,"behaviour_tags":tags_catalog}
+    output["block_behaviours.json"]["tag_confidence"] = BEHAVIOUR_TAG_CONFIDENCE
     output["blocks_master.json"]["schema_version"]=2
     output["blocks_master.json"]["classification_values"]=sorted(GEOMETRY_CLASSES)
     output["block_behaviours.json"]["schema_version"]=2
@@ -412,10 +460,16 @@ def enrich_outputs(output, source):
     # Add exact block entity coverage to audit and rebuild schema-versioned outputs.
     audit=output["catalogue_audit.json"]
     audit.update({"schema_version":2,"unresolved":unresolved_defs,"classification_consistency":{"geometry_classes":geometry_counts,"blocks_with_exactly_one_primary_geometry":len(original),"behavior_is_independent":True},"block_entity_summary":{"mapped_blocks":sum(1 for e in original if e["block_entity"]["type"]),"known_absent":sum(1 for e in original if not e["block_entity"]["type"]),"known_bed_absent":sum(1 for e in original if e["registry"]["internal_name"].endswith("_bed")),"unresolved":len(be_unresolved),"official_entity_types":len(entity_types)},"item_relationship_summary":output["block_item_relationships.json"]["counts"],"source_comparisons":{"official_block_registry_count":len(official_blocks),"client_blockstate_count":len(state_assets),"official_block_entity_type_count":len(entity_types),"official_block_item_registry_count":len(official_registries["minecraft:item"]["entries"]),"official_item_block_state_component_count":len(item_block_components),"official_server_url":OFFICIAL_SOURCE}})
-    audit["warnings"]=["Model geometry describes blockstate model element bounds; it does not prove in-game render layer, transparency, selection shape, or animation.","Unknown support, interaction, neighbor-update, translucency, and flammability fields require behavior/runtime sources and are not interpreted as false."]
+    audit["warnings"]=["Model geometry describes blockstate model element bounds; it does not prove in-game render layer, transparency, selection shape, or animation.","Unknown support, interaction, neighbor-update, translucency, and flammability fields require behavior/runtime sources and are not interpreted as false.","Manually assigned behavior tags are marked inferred or incomplete in block_behaviours.json; support-dependent tags are provisional candidates, not complete mechanics."]
+    audit["behaviour_tag_confidence"] = BEHAVIOUR_TAG_CONFIDENCE
     stats=output["catalogue_statistics.json"]
     stats["schema_version"]=2; stats["geometry_class_counts"]=geometry_counts
     stats["blocks_with_one_geometry_class"]=len(original); stats["blocks_without_matching_item"]=len(item_unresolved)
+    stats["blocks_with_block_entity_metadata"] = sum(1 for e in original if e["block_entity"]["type"] is not None)
+    final_tag_counts = {}
+    for beh in output["block_behaviours.json"]["blocks"]:
+        for tag in beh["tags"]: final_tag_counts[tag] = final_tag_counts.get(tag, 0) + 1
+    stats["behaviour_tags"] = dict(sorted(final_tag_counts.items()))
     stats["unresolved_field_counts"]={k:v["count"] for k,v in unresolved_defs.items()}
     output["catalogue_statistics.json"]=stats
     # retain normalized source manifest and append official provenance hashes
