@@ -1,0 +1,25 @@
+{
+  "repository": "https://github.com/Complexity-ML/minecraft-data-26.2",
+  "commit": "2a6a5fd9ebb0d964a73312d11beef596b7ec029b",
+  "data_path": "data/pc/26.2",
+  "edition": "Minecraft Java Edition",
+  "version": "26.2",
+  "files": {
+    "blocks.json": {
+      "sha256": "fb9f89b47bb05d6ae1fb9d02341f3375f73eb48b3440dbafaf0f35d8d54253ff",
+      "bytes": 933837
+    },
+    "blockCollisionShapes.json": {
+      "sha256": "2ea5bb9ba07f21759850ea7732a6cec30505053f75e0a254a052a43c5c8986d7",
+      "bytes": 2318312
+    },
+    "materials.json": {
+      "sha256": "e0f67369f5379971f0326cf50d502a90c1f02cf682c72cc6dc0ceba9e7772fde",
+      "bytes": 4098
+    },
+    "items.json": {
+      "sha256": "0e858d266a12887d66bcc2c5f079e4cd83a326782866694927cf45ce4cc14aa5",
+      "bytes": 203221
+    }
+  }
+}
