@@ -4,12 +4,10 @@
   "coverage_percent": 100.0,
   "classifications": {
     "fluid": 2,
-    "full_cube": 514,
-    "gravity_affected": 27,
-    "multipart_structure": 35,
-    "non_solid": 292,
-    "partial_geometry": 508,
-    "technical": 21
+    "full_cube": 427,
+    "multipart_structure": 34,
+    "non_solid": 94,
+    "partial_geometry": 639
   },
   "behaviour_tags": {
     "animated": 10,
@@ -45,9 +43,9 @@
   "source_names_missing_from_catalogue": 0,
   "missing_26_2_additions": [],
   "unresolved_field_counts": {
-    "render_geometry": 1196,
+    "render_geometry": 0,
     "selection_geometry": 1196,
-    "block_entity_type": 1180,
+    "block_entity_type": 0,
     "block_item_mapping": 154,
     "interaction_details": 1196,
     "support_rules": 1196,
@@ -55,5 +53,14 @@
     "translucency": 1196,
     "flammability": 1196
   },
-  "source_commit": "2a6a5fd9ebb0d964a73312d11beef596b7ec029b"
+  "source_commit": "2a6a5fd9ebb0d964a73312d11beef596b7ec029b",
+  "schema_version": 2,
+  "geometry_class_counts": {
+    "non_solid": 94,
+    "full_cube": 427,
+    "partial_geometry": 639,
+    "fluid": 2,
+    "multipart_structure": 34
+  },
+  "blocks_with_one_geometry_class": 1196
 }

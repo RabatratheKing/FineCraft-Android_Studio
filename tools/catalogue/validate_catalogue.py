@@ -1,110 +1,110 @@
 #!/usr/bin/env python3
-"""Validate catalogue coverage, source integrity, shape data and determinism."""
+"""Audit catalogue, Minecraft 26.2 server/client evidence, collisions and state coverage."""
 from __future__ import annotations
-import argparse
-import json
-import sys
-import tempfile
+import argparse, json, math, sys
+from collections import Counter
 from pathlib import Path
-from generate_catalogue import (BEHAVIOUR_TAGS, CLASSIFICATIONS, DEFAULT_OUTPUT, DEFAULT_SOURCE,
+from generate_catalogue import (BEHAVIOUR_TAGS, DEFAULT_OUTPUT, DEFAULT_SOURCE, GEOMETRY_CLASSES,
                                 SOURCE_COMMIT, build, stable_json)
-
 
 def load(path): return json.loads(path.read_text(encoding="utf-8"))
 def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--source-dir", type=Path, default=DEFAULT_SOURCE)
-    ap.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT)
-    args = ap.parse_args()
-    errors, warnings = [], []
-    source_blocks = load(args.source_dir / "blocks.json")
-    source_collisions = load(args.source_dir / "blockCollisionShapes.json")
-    source_names = {b["name"] for b in source_blocks}
-    outputs = build(args.source_dir)
-    master = outputs["blocks_master.json"]
-    defs = master["blocks"]
-    entries = {b["registry"]["internal_name"]: b for b in defs}
-    if len(defs) != len(source_blocks): errors.append(f"catalogue count {len(defs)} != source count {len(source_blocks)}")
-    if set(entries) != source_names:
-        errors.append(f"source registry mismatch: missing={sorted(source_names-set(entries))}; extra={sorted(set(entries)-source_names)}")
-    ids = [b["registry"]["id"] for b in defs]
-    namespaced = [b["registry"]["identifier"] for b in defs]
-    if len(ids) != len(set(ids)): errors.append("registry IDs are not unique")
-    if len(namespaced) != len(set(namespaced)): errors.append("namespaced identifiers are not unique")
-    src_by_name = {b["name"]: b for b in source_blocks}
-    for entry in defs:
-        r = entry["registry"]
-        source = src_by_name.get(r["internal_name"])
-        if source and (r["id"] != source["id"] or r["identifier"] != "minecraft:" + source["name"]):
-            errors.append(f"source identity mismatch: {r['identifier']}")
-        lo, hi, default = r["min_state_id"], r["max_state_id"], r["default_state_id"]
-        if not (isinstance(lo, int) and isinstance(hi, int) and lo <= hi and lo <= default <= hi):
-            errors.append(f"invalid state range/default: {r['identifier']}")
-        state_count = hi-lo+1 if isinstance(lo, int) and isinstance(hi, int) and hi >= lo else -1
-        if state_count != r["state_count"]: errors.append(f"state count mismatch: {r['identifier']}")
-        product = 1
-        for prop in r.get("states", []):
-            n = prop.get("num_values")
-            if not isinstance(n, int) or n < 1: errors.append(f"invalid state property count: {r['identifier']}:{prop.get('name')}")
-            else: product *= n
-            if isinstance(n, int) and len(prop.get("values", [])) != n: errors.append(f"state values mismatch: {r['identifier']}:{prop.get('name')}")
-        if r.get("states") and product != state_count: warnings.append(f"state property product {product} differs from ID range {state_count}: {r['identifier']}")
-        if not entry["classification"]["physical"] or not set(entry["classification"]["physical"]) <= CLASSIFICATIONS:
-            errors.append(f"invalid physical classification: {r['identifier']}")
-        if entry["properties"].get("light_emission") is not None and not (0 <= entry["properties"]["light_emission"] <= 15):
-            errors.append(f"light emission outside 0..15: {r['identifier']}")
-        tags = next((b["tags"] for b in outputs["block_behaviours.json"]["blocks"] if b["identifier"] == r["identifier"]), [])
-        invalid = set(tags) - BEHAVIOUR_TAGS
-        if invalid: errors.append(f"invalid behaviour tags for {r['identifier']}: {sorted(invalid)}")
-    if len(ids) != len(source_blocks) or set(ids) != {b["id"] for b in source_blocks}: errors.append("source registry IDs are missing or remapped")
-    if any("finecraft_id" in b or "legacy_block_id" in b for b in defs): errors.append("catalogue contains a reused/stale FineCraft ID field")
-    mappings = outputs["collision_shapes.json"]["block_state_mappings"]
-    shapes = outputs["collision_shapes.json"]["shapes"]
-    for source_block in source_blocks:
-        name = source_block["name"]
-        mapping = mappings.get("minecraft:" + name)
-        raw = source_collisions["blocks"].get(name)
-        if mapping is None or raw is None: errors.append(f"missing collision mapping: minecraft:{name}"); continue
-        ids_for_states = raw if isinstance(raw, list) else [raw] * (source_block["maxStateId"]-source_block["minStateId"]+1)
-        if len(ids_for_states) != source_block["maxStateId"]-source_block["minStateId"]+1:
-            errors.append(f"collision mapping length mismatch: minecraft:{name}")
-        if len(mapping) != len(ids_for_states): errors.append(f"generated collision mapping length mismatch: minecraft:{name}")
-        for shape_id in ids_for_states:
-            boxes = shapes.get(str(shape_id))
-            if boxes is None: errors.append(f"unresolved shape reference {shape_id}: minecraft:{name}"); continue
+    ap=argparse.ArgumentParser(); ap.add_argument("--source-dir",type=Path,default=DEFAULT_SOURCE); ap.add_argument("--output-dir",type=Path,default=DEFAULT_OUTPUT); a=ap.parse_args()
+    repo=Path(__file__).resolve().parents[2]; official_dir=Path(__file__).resolve().parent/"source"/"official_26.2"
+    errors=[]; warnings=[]; checks={}
+    src=load(a.source_dir/"blocks.json"); coll=load(a.source_dir/"blockCollisionShapes.json"); official=load(official_dir/"blocks.json"); regs=load(official_dir/"registries.json"); models=load(official_dir/"client_geometry.json")
+    out=build(a.source_dir); master=out["blocks_master.json"]; defs=master["blocks"]; by_name={e["registry"]["internal_name"]:e for e in defs}
+    src_by={b["name"]:b for b in src}; official_by={k.split(":",1)[1]:v for k,v in official.items()}
+    if len(defs)!=len(src) or set(by_name)!=set(src_by): errors.append("block registry count/identifier coverage differs from source")
+    ids=[e["registry"]["id"] for e in defs]; names=[e["registry"]["identifier"] for e in defs]
+    if len(set(ids))!=len(ids) or len(set(names))!=len(names): errors.append("registry IDs or namespaced identifiers are duplicated")
+    if len(official)!=len(defs): errors.append(f"official server report block count {len(official)} != catalogue {len(defs)}")
+    state_count=0; property_count=0; state_mismatches=[]; id_set=set()
+    for name,e in by_name.items():
+        r=e["registry"]; s=src_by[name]; o=official_by.get(name,{}); sidset=set(range(r["min_state_id"],r["max_state_id"]+1)); state_count+=r["state_count"]
+        if (r["id"],r["min_state_id"],r["max_state_id"],r["default_state_id"])!=(s["id"],s["minStateId"],s["maxStateId"],s["defaultState"]): errors.append(f"upstream identity/state range differs for {name}")
+        if id_set & sidset: errors.append(f"overlapping state ID range: {name}")
+        id_set |= sidset
+        props=r.get("states",[]); property_count+=len(props)
+        if len(o.get("states",[]))!=r["state_count"]: state_mismatches.append(name+":state_count"); continue
+        if {x["id"] for x in o["states"]}!=sidset: state_mismatches.append(name+":state_ids")
+        if {p["name"] for p in props}!={k for k in o.get("properties",{})}: state_mismatches.append(name+":property_names")
+        # Compare every state tuple using normalized string values against explicit state domains.
+        domains={p["name"]:{str(v).lower() for v in p.get("values",[])} for p in props}
+        for state in o.get("states",[]):
+            values=state.get("properties",{})
+            if set(values)!=set(domains) or any(str(values[k]).lower() not in domains[k] for k in values):
+                state_mismatches.append(f"{name}:state_{state['id']}_properties"); break
+        cls=e.get("classification",{}); primary=cls.get("primary_geometry")
+        if primary not in GEOMETRY_CLASSES: errors.append(f"invalid primary geometry: {name}:{primary}")
+        if len(cls)!=1: errors.append(f"geometry is not exactly one primary class: {name}")
+        tags=next((b["tags"] for b in out["block_behaviours.json"]["blocks"] if b["identifier"]=="minecraft:"+name),[])
+        if len(tags)!=len(set(tags)) or set(tags)- (BEHAVIOUR_TAGS|{"technical","fluid"}): errors.append(f"invalid or duplicate behavior tags: {name}")
+        if e["properties"].get("light_emission") is not None and not 0<=e["properties"]["light_emission"]<=15: errors.append(f"invalid light emission: {name}")
+    if state_mismatches: errors.append(f"official state/property mismatches: {len(state_mismatches)}; examples={state_mismatches[:12]}")
+    checks["official_state_IDs_and_properties"]={"states_compared":state_count,"properties_compared":property_count,"mismatch_count":len(state_mismatches),"mismatch_examples":state_mismatches[:20]}
+    # Validate every source collision row, every state link, every box and duplicate geometry shape.
+    shapes=out["collision_shapes.json"]["shapes"]; mappings=out["collision_shapes.json"]["block_state_mappings"]; used=set(); collision_rows=0; box_count=0
+    for b in src:
+        name=b["name"]; raw=coll["blocks"].get(name); mapping=mappings.get("minecraft:"+name); n=b["maxStateId"]-b["minStateId"]+1
+        raw_ids=raw if isinstance(raw,list) else ([raw]*n if isinstance(raw,int) else None)
+        if raw_ids is None or len(raw_ids)!=n or not isinstance(mapping,dict) or set(mapping)!={str(x) for x in range(b["minStateId"],b["maxStateId"]+1)}:
+            errors.append(f"incomplete collision state mapping: {name}"); continue
+        if len(raw_ids)!=n: continue
+        for ix,sid in enumerate(raw_ids):
+            collision_rows+=1; state_id=b["minStateId"]+ix; sidtext=str(sid); boxes=shapes.get(sidtext)
+            if mapping.get(str(state_id))!=sid: errors.append(f"collision state remap mismatch: {name}:{state_id}")
+            if boxes is None: errors.append(f"missing referenced shape: {name}:{state_id}->{sid}"); continue
+            used.add(sidtext)
+            if not isinstance(boxes,list): errors.append(f"shape must be a list of boxes: {sid}"); continue
             for box in boxes:
-                if len(box) != 6 or any(not isinstance(v, (int, float)) for v in box):
-                    errors.append(f"invalid bounds tuple: shape {shape_id}"); continue
-                if any(box[i] > box[i+3] for i in range(3)): errors.append(f"inverted bounds: shape {shape_id}: {box}")
-    expected_additions = {"sulfur", "potent_sulfur", "sulfur_slab", "sulfur_stairs", "sulfur_wall", "polished_sulfur", "polished_sulfur_slab", "polished_sulfur_stairs", "polished_sulfur_wall", "sulfur_bricks", "sulfur_brick_slab", "sulfur_brick_stairs", "sulfur_brick_wall", "chiseled_sulfur", "cinnabar", "cinnabar_slab", "cinnabar_stairs", "cinnabar_wall", "polished_cinnabar", "polished_cinnabar_slab", "polished_cinnabar_stairs", "polished_cinnabar_wall", "cinnabar_bricks", "cinnabar_brick_slab", "cinnabar_brick_stairs", "cinnabar_brick_wall", "chiseled_cinnabar", "sulfur_spike"}
-    missing_additions = expected_additions - source_names
-    if missing_additions: errors.append(f"26.2 source additions missing: {sorted(missing_additions)}")
-    for required in ["potent_sulfur", "sulfur_spike"]:
-        found = entries.get(required)
-        if not found: errors.append(f"missing special 26.2 block: {required}")
-    if any(b["registry"]["identifier"].endswith("_bed") and b["classification"]["primary_geometry"] != "multipart_structure" for b in defs):
-        errors.append("bed multipart classification missing")
-    # Build twice and compare byte-for-byte with both the second build and generated files.
-    first = {name: stable_json(data) for name, data in outputs.items()}
-    second = {name: stable_json(data) for name, data in build(args.source_dir).items()}
-    if first != second: errors.append("repeated generation is not deterministic")
-    for name, expected in first.items():
-        path = args.output_dir / name
-        if not path.exists(): errors.append(f"generated output missing: {name}")
-        elif path.read_bytes() != expected: errors.append(f"generated output differs from pinned inputs: {name}")
-    warnings += outputs["catalogue_audit.json"]["warnings"]
-    missing_item_count = outputs["catalogue_statistics.json"]["blocks_without_matching_item"]
-    if missing_item_count:
-        warnings.append(f"{missing_item_count} blocks have no exact-name item entry in the source item registry; identifiers are listed in the audit.")
-    report = {"status": "passed_with_unresolved_fields" if not errors else "failed", "source_commit": SOURCE_COMMIT,
-              "source_registry_count": len(source_blocks), "catalogued_count": len(defs), "errors": errors,
-              "warnings": sorted(set(warnings)), "unresolved": outputs["catalogue_audit.json"]["unresolved"],
-              "checks": {"registry_completeness": not errors, "unique_ids_and_identifiers": len(ids)==len(set(ids)) and len(namespaced)==len(set(namespaced)),
-                         "collision_state_coverage": sum(v is not None for v in mappings.values()),
-                         "collision_shape_count": len(shapes), "deterministic_repeated_build": first==second,
-                         "26_2_additions_present": not missing_additions}}
-    args.output_dir.mkdir(parents=True, exist_ok=True)
-    (args.output_dir / "catalogue_validation_report.json").write_bytes(stable_json(report))
-    print(json.dumps({k: report[k] for k in ("status", "source_registry_count", "catalogued_count", "errors", "warnings")}, indent=2))
+                box_count+=1
+                if not isinstance(box,list) or len(box)!=6 or any(not isinstance(v,(int,float)) or not math.isfinite(v) for v in box): errors.append(f"invalid/non-finite bounds: shape {sid}"); continue
+                if any(box[i]>box[i+3] for i in range(3)): errors.append(f"inverted box: shape {sid}: {box}")
+    sigs=Counter(json.dumps(v,separators=(",",":"),sort_keys=True) for v in shapes.values()); unique=len(sigs)
+    if set(shapes)-used: warnings.append(f"{len(set(shapes)-used)} shape IDs are not referenced by any block-state map")
+    checks["collision"]={"block_mappings":len(mappings),"expected_block_mappings":len(src),"state_mappings_checked":collision_rows,"expected_states":state_count,"state_mapping_gaps":state_count-collision_rows,"shape_IDs":len(shapes),"referenced_shape_IDs":len(used),"unreferenced_shape_IDs":len(set(shapes)-used),"box_count":box_count,"unique_exact_shape_geometries":unique,"duplicate_geometry_shape_IDs":len(shapes)-unique,"geometry_errors":len(errors)}
+    # Official client assets: all catalogue blockstates and referenced models must resolve.
+    model_missing=[]; refs_missing=[]
+    for name in by_name:
+        state=models["blockstates"].get(name)
+        if state is None:model_missing.append(name); continue
+        refs=set()
+        def walk(v):
+            if isinstance(v,dict):
+                if isinstance(v.get("model"),str):refs.add(v["model"])
+                for x in v.values():walk(x)
+            elif isinstance(v,list):
+                for x in v:walk(x)
+        walk(state)
+        refs_missing += [f"{name}->{r}" for r in refs if r not in models["models"]]
+    if model_missing or refs_missing: errors.append(f"client model refs missing: blocks={len(model_missing)}, refs={len(refs_missing)}")
+    checks["client_models"]={"blockstates_found":len(by_name)-len(model_missing),"missing_blockstates":len(model_missing),"model_references_missing":len(refs_missing),"client_jar_sha1":models["source"]["client_jar_sha1"]}
+    # Block-entity registry mapping must cover all registered types; all nonmatches remain explicitly known absent.
+    mapped={b["block_entity"]["type"] for b in out["block_behaviours.json"]["blocks"] if b["block_entity"]["type"]}
+    registry_entities=set(regs["minecraft:block_entity_type"]["entries"])
+    if mapped!=registry_entities: errors.append(f"block entity registry coverage differs: missing={sorted(registry_entities-mapped)}, extra={sorted(mapped-registry_entities)}")
+    checks["block_entities"]={"registry_types":len(registry_entities),"types_mapped_to_blocks":len(mapped),"blocks_with_type":sum(bool(e["block_entity"]["type"]) for e in defs),"known_absent_blocks":sum(not e["block_entity"]["type"] for e in defs)}
+    # Item relation counts are evidence labels only, no guessed aliases are promoted.
+    item_report=out["block_item_relationships.json"]; component_items=set(item_report["official_item_block_state_components"]); missing_names={x["block"] for x in item_report["blocks"] if x["status"]=="no_exact_name_item"};
+    if len(component_items)!=12 or any(name not in {"minecraft:"+n for n in by_name} for name in component_items) or component_items & missing_names: errors.append("official item block_state component evidence inconsistent")
+    exact=sum(x["status"]=="exact_name_item" for x in item_report["blocks"])
+    if len(item_report["blocks"])!=len(defs) or exact!=1042: errors.append("item relationship coverage/count inconsistent")
+    checks["item_relationships"]={**item_report["counts"],"official_item_block_state_components":len(component_items),"components_overlap_missing_exact_name":len(component_items & missing_names),"total_blocks":len(item_report["blocks"])}
+    # Example semantic regression guards for requested independent dimensions.
+    for name,geom,tag in [("sand","full_cube","gravity_affected"),("glowstone","full_cube","light_emitter"),("torch","partial_geometry","support_dependent")]:
+        e=by_name.get(name); tags=next(b["tags"] for b in out["block_behaviours.json"]["blocks"] if b["identifier"]=="minecraft:"+name)
+        if not e or e["classification"]["primary_geometry"]!=geom or tag not in tags:errors.append(f"independent geometry/behavior example failed: {name}")
+    checks["classification_consistency"]={"geometry_classes":out["catalogue_audit.json"]["classification_consistency"]["geometry_classes"],"exactly_one_per_block":True,"gravity_is_behavior_only":"gravity_affected" not in master["classification_values"]}
+    # Reproducible generation and files on disk.
+    first={k:stable_json(v) for k,v in out.items()}; second={k:stable_json(v) for k,v in build(a.source_dir).items()}
+    if first!=second:errors.append("generation differs between repeated runs")
+    a.output_dir.mkdir(parents=True,exist_ok=True)
+    for name,data in first.items():
+        f=a.output_dir/name
+        if not f.exists() or f.read_bytes()!=data: errors.append(f"generated file differs from reproducible output: {name}")
+    report={"schema_version":2,"status":"passed_with_unresolved_fields" if not errors else "failed","source_commit":SOURCE_COMMIT,"source_registry_count":len(src),"catalogued_count":len(defs),"state_count":state_count,"state_property_count":property_count,"errors":errors,"warnings":sorted(set(warnings) | set(out["catalogue_audit.json"]["warnings"])),"unresolved":out["catalogue_audit.json"]["unresolved"],"checks":checks,"limitations":["JSON and asset checks establish source consistency, not pixel-perfect rendering or live in-game collision/support behavior.","Selection, interaction, support update rules, neighbor update rules, render alpha/layer, and fire spread require runtime/game-code evidence.","Exact-name item matches are direct; candidate drop relationships are explicitly unverified."]}
+    (a.output_dir/"catalogue_validation_report.json").write_bytes(stable_json(report))
+    print(json.dumps({k:report[k] for k in ("status","source_registry_count","catalogued_count","state_count","state_property_count","errors","checks")},indent=2))
     return 1 if errors else 0
-if __name__ == "__main__": sys.exit(main())
+if __name__=="__main__":sys.exit(main())

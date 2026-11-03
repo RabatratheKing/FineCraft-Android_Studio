@@ -21,5 +21,17 @@
       "sha256": "0e858d266a12887d66bcc2c5f079e4cd83a326782866694927cf45ce4cc14aa5",
       "bytes": 203221
     }
+  },
+  "official_26_2": {
+    "server_reports": {
+      "blocks_sha256": "dec22eb9547b0bbea396cbf35569f7ec81b7be662775ce03dc2236227473af7b",
+      "registries_sha256": "9f34d4deb0b494627f6a1a1590e7fb21c11a3949d84bacb59a304e6315287b24",
+      "item_block_state_components_sha256": "dfc14632591c3475c74435a43d77a0077b4826b393b2e08f45eff424d118a3d0",
+      "server_jar_sha1": "823e2250d24b3ddac457a60c92a6a941943fcd6a",
+      "generated_by": "Mojang net.minecraft.data.Main --reports --output"
+    },
+    "client_geometry_sha256": "45e09c12d5a3fa9a8785692b47e70ae013358488a2aa19a9e1017bf592be18a7",
+    "client_jar_sha1": "2dc72797acbc1b63fc16a11c4ac393605f453754",
+    "extractor": "tools/catalogue/extract_mojang_client_geometry.py"
   }
 }

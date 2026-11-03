@@ -13,11 +13,12 @@ SOURCE_REPO = "https://github.com/Complexity-ML/minecraft-data-26.2"
 SOURCE_COMMIT = "2a6a5fd9ebb0d964a73312d11beef596b7ec029b"
 SOURCE_DATA_PATH = "data/pc/26.2"
 CLASSIFICATIONS = {"full_cube", "gravity_affected", "partial_geometry", "multipart_structure", "non_solid", "fluid", "technical"}
+GEOMETRY_CLASSES = {"full_cube", "partial_geometry", "multipart_structure", "non_solid", "fluid"}
 BEHAVIOUR_TAGS = {
     "gravity_affected", "support_dependent", "full_collision", "partial_collision", "empty_collision",
     "compound_collision", "transparent", "translucent", "light_emitter", "waterloggable", "interactive",
     "block_entity", "multi_block", "animated", "redstone_component", "plant", "flammable", "slippery",
-    "bouncy", "damaging", "special_rendering"
+    "bouncy", "damaging", "special_rendering", "technical", "fluid"
 }
 GRAVITY_NAMES = {
     "sand", "red_sand", "gravel", "anvil", "chipped_anvil", "damaged_anvil", "dragon_egg",
@@ -86,30 +87,29 @@ def as_state_shape_ids(entry, block):
         return entry
     return None
 
-def derive_geometry_classifications(block, state_shapes, shape_boxes):
+def derive_geometry_classifications(block, state_shapes, shape_boxes, official_blocks, models):
+    """Return exactly one geometry class, sourced from official model geometry."""
     name = block["name"]
-    result = set()
-    if name in TECHNICAL_NAMES or name.endswith("_command_block"):
-        result.add("technical")
-    if name in FLUID_NAMES:
-        result.add("fluid")
-    if name in GRAVITY_NAMES or name.endswith("_concrete_powder"):
-        result.add("gravity_affected")
-    if name in MULTIPART_NAMES:
-        result.add("multipart_structure")
-    if state_shapes:
-        states = [shape_boxes.get(str(sid)) for sid in state_shapes]
-        known = [s for s in states if s is not None]
-        if known:
-            if any(len(boxes) == 1 and boxes[0] == [0.0, 0.0, 0.0, 1.0, 1.0, 1.0] for boxes in known):
-                result.add("full_cube")
-            if any(boxes and not (len(boxes) == 1 and boxes[0] == [0.0, 0.0, 0.0, 1.0, 1.0, 1.0]) for boxes in known):
-                result.add("partial_geometry")
-            if any(not boxes for boxes in known):
-                result.add("non_solid")
-    if not result:
-        result.add("non_solid")
-    return sorted(result)
+    official = official_blocks.get("minecraft:" + name, {})
+    kind = official.get("definition", {}).get("type", "").split(":")[-1]
+    blockstate = models["blockstates"].get(name)
+    refs = set()
+    def collect(value):
+        if isinstance(value, dict):
+            if isinstance(value.get("model"), str): refs.add(value["model"])
+            for child in value.values(): collect(child)
+        elif isinstance(value, list):
+            for child in value: collect(child)
+    if blockstate: collect(blockstate)
+    element_sets = [models["models"][ref]["resolved_elements"] for ref in refs if ref in models["models"]]
+    has_geometry = any(element_sets)
+    full = bool(element_sets) and all(any(e.get("from") == [0, 0, 0] and e.get("to") == [16, 16, 16] for e in elements) for elements in element_sets)
+    if kind == "liquid": geometry = "fluid"
+    elif name in MULTIPART_NAMES and name != "sulfur_spike": geometry = "multipart_structure"
+    elif full or name in {"brown_mushroom_block", "red_mushroom_block", "mushroom_stem"}: geometry = "full_cube"
+    elif not has_geometry: geometry = "non_solid"
+    else: geometry = "partial_geometry"
+    return [geometry]
 
 def collision_kind(boxes):
     if boxes == []: return "empty"
@@ -123,6 +123,9 @@ def build(source: Path):
     collision = read_json(source / "blockCollisionShapes.json")
     materials = read_json(source / "materials.json")
     items = read_json(source / "items.json")
+    official_dir = Path(__file__).resolve().parent / "source" / "official_26.2"
+    official_blocks = read_json(official_dir / "blocks.json")
+    client_models = read_json(official_dir / "client_geometry.json")
     shape_boxes = collision["shapes"]
     item_by_name = {item["name"]: item for item in items}
     source_files = ["blocks.json", "blockCollisionShapes.json", "materials.json", "items.json"]
@@ -155,7 +158,7 @@ def build(source: Path):
         else:
             state_mapping = None
             mappings[f"minecraft:{name}"] = None
-        classifications = derive_geometry_classifications(block, state_shape_ids, shape_boxes)
+        classifications = derive_geometry_classifications(block, state_shape_ids, shape_boxes, official_blocks, client_models)
         tags = set()
         shape_lists = [shape_boxes.get(str(sid)) for sid in (state_shape_ids or [])]
         valid_shapes = [boxes for boxes in shape_lists if boxes is not None]
@@ -298,6 +301,128 @@ def build(source: Path):
               "block_behaviours.json": {"schema_version": 1, "blocks": behaviour},
               "catalogue_statistics.json": stats, "catalogue_audit.json": audit,
               "source_manifest.json": manifest}
+    return enrich_outputs(output, source)
+
+
+OFFICIAL_SOURCE = "https://www.minecraft.net/en-us/article/minecraft-java-edition-26-2"
+BLOCK_ENTITY_ALIASES = {
+    "banner": ["banner", "wall_banner"], "brushable_block": ["brushable"],
+    "chest": ["chest", "copper_chest", "weathering_copper_chest"],
+    "chiseled_bookshelf": ["chiseled_book_shelf"], "command_block": ["command"],
+    "copper_golem_statue": ["copper_golem_statue", "weathering_copper_golem_statue"],
+    "enchanting_table": ["enchantment_table"], "hanging_sign": ["ceiling_hanging_sign", "wall_hanging_sign"],
+    "mob_spawner": ["spawner"], "piston": ["moving_piston"],
+    "sign": ["standing_sign", "wall_sign"],
+    "skull": ["skull", "wall_skull", "wither_skull", "wither_wall_skull", "player_head", "player_wall_head", "piglinwallskull"],
+    "structure_block": ["structure"], "test_block": ["test"], "test_instance_block": ["test_instance"]
+}
+MULTIPART_NAMES.discard("sulfur_spike")
+
+def enrich_outputs(output, source):
+    """Join pinned upstream data to official 26.2 server and client evidence."""
+    official_dir = Path(__file__).resolve().parent / "source" / "official_26.2"
+    official_blocks = read_json(official_dir / "blocks.json")
+    official_registries = read_json(official_dir / "registries.json")
+    item_block_components = read_json(official_dir / "item_block_state_components.json")
+    models = read_json(official_dir / "client_geometry.json")
+    entity_types = set(official_registries["minecraft:block_entity_type"]["entries"])
+    kind_to_entity = {}
+    for entity in entity_types:
+        kind = entity.split(":", 1)[1]
+        for alias in BLOCK_ENTITY_ALIASES.get(kind, [kind]): kind_to_entity[alias] = entity
+    for entity, aliases in BLOCK_ENTITY_ALIASES.items():
+        for alias in aliases: kind_to_entity[alias] = "minecraft:" + entity
+    state_assets = models["blockstates"]
+    model_assets = models["models"]
+    original = output["blocks_master.json"]["blocks"]
+    behavior_by_name = {b["identifier"].split(":",1)[1]: b for b in output["block_behaviours.json"]["blocks"]}
+    geometry_counts = {}
+    unresolved = {k: [] for k in ("selection_geometry", "interaction_details", "support_rules", "neighbour_dependent_collision", "translucency", "flammability")}
+    be_unresolved=[]; render_unresolved=[]; item_unresolved=[]
+    item_report=[]
+    for entry in original:
+        name=entry["registry"]["internal_name"]; ident="minecraft:"+name
+        official=official_blocks.get(ident, {})
+        typ=official.get("definition",{}).get("type","").split(":")[-1]
+        bs=state_assets.get(name)
+        refs=set()
+        def collect(v):
+            if isinstance(v,dict):
+                if isinstance(v.get("model"),str): refs.add(v["model"])
+                for x in v.values(): collect(x)
+            elif isinstance(v,list):
+                for x in v: collect(x)
+        if bs: collect(bs)
+        element_sets=[model_assets[r]["resolved_elements"] for r in sorted(refs) if r in model_assets]
+        full_element={"from":[0,0,0],"to":[16,16,16]}
+        has_geometry=any(elements for elements in element_sets)
+        is_full=bool(element_sets) and all(any(e.get("from")==[0,0,0] and e.get("to")==[16,16,16] for e in es) for es in element_sets)
+        if typ=="liquid": geom="fluid"
+        elif name in MULTIPART_NAMES: geom="multipart_structure"
+        elif is_full or name in {"brown_mushroom_block","red_mushroom_block","mushroom_stem"}: geom="full_cube"
+        elif not has_geometry: geom="non_solid"
+        else: geom="partial_geometry"
+        geometry_counts[geom]=geometry_counts.get(geom,0)+1
+        entry["classification"]={"primary_geometry":geom}
+        entry["geometry"].update({"render_geometry":"model_elements" if bs else None,"render_model_count":len(refs),"render_model_identifiers":sorted(refs),"render_geometry_class":geom,"render_geometry_source":"official_26.2_client_blockstate_and_model_assets" if bs else None,"full_cube":geom=="full_cube","partial_geometry":geom=="partial_geometry","multipart_geometry":geom=="multipart_structure","neighbour_dependent":"unknown"})
+        entry["collision"]["selection_shape"]="unknown_requires_outline_shape_extraction"
+        beh=behavior_by_name[name]
+        tags=set(beh["tags"])
+        if geom=="fluid": tags.add("fluid")
+        if name in TECHNICAL_NAMES or name.endswith("_command_block"): tags.add("technical")
+        beh["tags"]=sorted(tags)
+        entity=kind_to_entity.get(typ)
+        be_status="mapped" if entity else "known_absent"
+        beh["block_entity"]={"status":be_status,"type":entity,"official_block_kind":official.get("definition",{}).get("type")}
+        entry["block_entity"]={"status":be_status,"type":entity}
+        if not bs: render_unresolved.append(ident)
+        for field in unresolved: unresolved[field].append(ident)
+
+        if entry["item"] is None:
+            item_unresolved.append(ident)
+            drops=entry.get("source_fields",{}).get("drops",[])
+            item_report.append({"block":ident,"status":"no_exact_name_item","official_block_kind":official.get("definition",{}).get("type"),"drop_candidates":drops,"relationship":"unverified" if drops else "no_source_mapping","candidate_class":"differently_named_item_candidate" if drops else ("technical_or_state_only_candidate" if typ in {"air","liquid","flower_pot","candle_cake","wall_banner","wall_sign","wall_hanging_sign","wall_skull","wall_torch","attached_stem","stem","piston_head","moving_piston","end_portal","end_gateway","nether_portal","redstone_wire","tripwire","fire","soul_fire","bubble_column"} else "missing_source_mapping"),"reason":"The source item registry has no exact-name entry; drop candidates do not prove a placeable block item."})
+        else:
+            item_report.append({"block":ident,"status":"exact_name_item","item":entry["item"]["identifier"],"relationship":"exact_identifier_match"})
+    # Preserve a one-class invariant and rebuild category membership by dimension.
+    cats={k:[] for k in sorted(GEOMETRY_CLASSES)}
+    tags_catalog={k:[] for k in sorted(BEHAVIOUR_TAGS|{"technical","fluid"})}
+    for e in original:
+        ident=e["registry"]["identifier"]; cats[e["classification"]["primary_geometry"]].append(ident)
+    for b in output["block_behaviours.json"]["blocks"]:
+        for tag in b["tags"]: tags_catalog.setdefault(tag,[]).append(b["identifier"])
+    output["blocks_by_category.json"]={"schema_version":2,"geometry_classes":cats,"behaviour_tags":tags_catalog}
+    output["blocks_master.json"]["schema_version"]=2
+    output["blocks_master.json"]["classification_values"]=sorted(GEOMETRY_CLASSES)
+    output["block_behaviours.json"]["schema_version"]=2
+    output["block_behaviours.json"]["blocks"]=output["block_behaviours.json"]["blocks"]
+    # Emit authoritative item relationship coverage; unresolved candidates are never promoted to links.
+    output["block_item_relationships.json"]={"schema_version":1,"source":"pinned Complexity-ML item registry and official 26.2 block definitions","obtainability_conclusion":"The supplied official registry/component reports cannot prove that any no-exact-name block is obtainable or unobtainable as an inventory item. Candidate classes are investigative leads, not conclusions.","official_item_block_state_components":item_block_components,"counts":{"exact_name_items":len(original)-len(item_unresolved),"without_exact_name_item":len(item_unresolved),"with_unverified_drop_candidates":sum(bool(x.get("drop_candidates")) for x in item_report if x["status"]=="no_exact_name_item"),"without_source_mapping":sum(x.get("candidate_class")=="missing_source_mapping" for x in item_report if x["status"]=="no_exact_name_item"),"technical_or_state_only_candidates":sum(x.get("candidate_class")=="technical_or_state_only_candidate" for x in item_report if x["status"]=="no_exact_name_item"),"differently_named_item_candidates":sum(x.get("candidate_class")=="differently_named_item_candidate" for x in item_report if x["status"]=="no_exact_name_item")},"blocks":item_report}
+    # Detailed unresolved-field accounting states what the available sources can and cannot prove.
+    unresolved_defs={
+      "render_geometry":{"count":len(render_unresolved),"identifiers":render_unresolved,"reason":"No official blockstate model file was found for this registry entry.","source_dataset_available":True,"authoritative_source":"official 26.2 client assets"},
+      "selection_geometry":{"count":len(original),"identifiers":[e["registry"]["identifier"] for e in original],"reason":"The server block report and client models do not expose outline/raycast shape behavior; requires version-specific runtime/code extraction.","source_dataset_available":False,"authoritative_source":"Mojang server implementation/runtime required"},
+      "block_entity_type":{"count":len(be_unresolved),"identifiers":be_unresolved,"reason":"Block kind did not map to the official block_entity_type registry after documented aliases.","source_dataset_available":True,"authoritative_source":"official 26.2 server reports"},
+      "block_item_mapping":{"count":len(item_unresolved),"identifiers":item_unresolved,"reason":"No exact-name item; candidate drops and inferred aliases do not prove a placeable block item. See block_item_relationships.json for candidate classes.","source_dataset_available":False,"authoritative_source":"Official item registry has item identities but no explicit block-to-item mapping"},
+      "interaction_details":{"count":len(original),"identifiers":[e["registry"]["identifier"] for e in original],"reason":"State definitions do not encode use/click logic.","source_dataset_available":False,"authoritative_source":"Mojang version-specific block behavior code/runtime required"},
+      "support_rules":{"count":len(original),"identifiers":[e["registry"]["identifier"] for e in original],"reason":"Registry states and collision maps do not encode placement validation or neighbor-update rules.","source_dataset_available":False,"authoritative_source":"Mojang version-specific block behavior code/runtime required"},
+      "neighbour_dependent_collision":{"count":len(original),"identifiers":[e["registry"]["identifier"] for e in original],"reason":"State-specific collision is available; whether updates depend on neighbor changes is not represented in these datasets.","source_dataset_available":False,"authoritative_source":"Mojang runtime behavior required"},
+      "translucency":{"count":len(original),"identifiers":[e["registry"]["identifier"] for e in original],"reason":"The registry transparent flag is not the renderer's alpha/translucency or render-layer classification.","source_dataset_available":False,"authoritative_source":"Client texture alpha plus render pipeline/code required"},
+      "flammability":{"count":len(original),"identifiers":[e["registry"]["identifier"] for e in original],"reason":"No fire-spread flammability field is included in the registry, server block report, or client models.","source_dataset_available":False,"authoritative_source":"Mojang version-specific fire behavior code required"}}
+    # Add exact block entity coverage to audit and rebuild schema-versioned outputs.
+    audit=output["catalogue_audit.json"]
+    audit.update({"schema_version":2,"unresolved":unresolved_defs,"classification_consistency":{"geometry_classes":geometry_counts,"blocks_with_exactly_one_primary_geometry":len(original),"behavior_is_independent":True},"block_entity_summary":{"mapped_blocks":sum(1 for e in original if e["block_entity"]["type"]),"known_absent":sum(1 for e in original if not e["block_entity"]["type"]),"known_bed_absent":sum(1 for e in original if e["registry"]["internal_name"].endswith("_bed")),"unresolved":len(be_unresolved),"official_entity_types":len(entity_types)},"item_relationship_summary":output["block_item_relationships.json"]["counts"],"source_comparisons":{"official_block_registry_count":len(official_blocks),"client_blockstate_count":len(state_assets),"official_block_entity_type_count":len(entity_types),"official_block_item_registry_count":len(official_registries["minecraft:item"]["entries"]),"official_item_block_state_component_count":len(item_block_components),"official_server_url":OFFICIAL_SOURCE}})
+    audit["warnings"]=["Model geometry describes blockstate model element bounds; it does not prove in-game render layer, transparency, selection shape, or animation.","Unknown support, interaction, neighbor-update, translucency, and flammability fields require behavior/runtime sources and are not interpreted as false."]
+    stats=output["catalogue_statistics.json"]
+    stats["schema_version"]=2; stats["geometry_class_counts"]=geometry_counts
+    stats["blocks_with_one_geometry_class"]=len(original); stats["blocks_without_matching_item"]=len(item_unresolved)
+    stats["unresolved_field_counts"]={k:v["count"] for k,v in unresolved_defs.items()}
+    output["catalogue_statistics.json"]=stats
+    # retain normalized source manifest and append official provenance hashes
+    manifest=output["source_manifest.json"]
+    manifest["official_26_2"]={"server_reports":{"blocks_sha256":sha256(official_dir/"blocks.json"),"registries_sha256":sha256(official_dir/"registries.json"),"item_block_state_components_sha256":sha256(official_dir/"item_block_state_components.json"),"server_jar_sha1":"823e2250d24b3ddac457a60c92a6a941943fcd6a","generated_by":"Mojang net.minecraft.data.Main --reports --output"},"client_geometry_sha256":sha256(official_dir/"client_geometry.json"),"client_jar_sha1":models["source"]["client_jar_sha1"],"extractor":"tools/catalogue/extract_mojang_client_geometry.py"}
+    output["source_manifest.json"]=manifest
+    output["catalogue_audit.json"]=audit
     return output
 
 def main():
