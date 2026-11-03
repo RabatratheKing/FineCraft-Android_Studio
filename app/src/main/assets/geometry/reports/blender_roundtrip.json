@@ -1,0 +1,242 @@
+{
+  "assets": [
+    {
+      "aggregate_bounds_max_delta": 0.0,
+      "block_id": "minecraft:oak_door",
+      "collision": [
+        {
+          "box_count": 1,
+          "source_shape_id": 59,
+          "state_id": 5658,
+          "status": "pass"
+        },
+        {
+          "box_count": 1,
+          "source_shape_id": 59,
+          "state_id": 5666,
+          "status": "pass"
+        }
+      ],
+      "collision_box_count": 2,
+      "component_count": 2,
+      "components": [
+        {
+          "bounds_max_delta": 0.0,
+          "name": "Body",
+          "normal_max_delta": 0.0,
+          "state_id": 5658,
+          "status": "pass",
+          "triangle_count": 12,
+          "vertex_position_max_delta": 0.0
+        },
+        {
+          "bounds_max_delta": 0.0,
+          "name": "Body",
+          "normal_max_delta": 0.0,
+          "state_id": 5666,
+          "status": "pass",
+          "triangle_count": 12,
+          "vertex_position_max_delta": 0.0
+        }
+      ],
+      "reimport_bounds": [
+        [
+          -0.5,
+          0.0,
+          0.3125
+        ],
+        [
+          0.5,
+          2.0,
+          0.5
+        ]
+      ],
+      "source_bounds": [
+        [
+          -0.5,
+          0.0,
+          0.3125
+        ],
+        [
+          0.5,
+          2.0,
+          0.5
+        ]
+      ],
+      "state_ids": [
+        5658,
+        5666
+      ],
+      "status": "pass",
+      "triangle_count": 24
+    },
+    {
+      "aggregate_bounds_max_delta": 0.0,
+      "block_id": "minecraft:oak_stairs",
+      "collision": [
+        {
+          "box_count": 2,
+          "source_shape_id": 33,
+          "state_id": 3918,
+          "status": "pass"
+        }
+      ],
+      "collision_box_count": 2,
+      "component_count": 1,
+      "components": [
+        {
+          "bounds_max_delta": 0.0,
+          "name": "Body",
+          "normal_max_delta": 0.0,
+          "state_id": 3918,
+          "status": "pass",
+          "triangle_count": 24,
+          "vertex_position_max_delta": 0.0
+        }
+      ],
+      "reimport_bounds": [
+        [
+          -0.5,
+          0.0,
+          -0.5
+        ],
+        [
+          0.5,
+          1.0,
+          0.5
+        ]
+      ],
+      "source_bounds": [
+        [
+          -0.5,
+          0.0,
+          -0.5
+        ],
+        [
+          0.5,
+          1.0,
+          0.5
+        ]
+      ],
+      "state_ids": [
+        3918
+      ],
+      "status": "pass",
+      "triangle_count": 24
+    },
+    {
+      "aggregate_bounds_max_delta": 0.0,
+      "block_id": "minecraft:stone",
+      "collision": [
+        {
+          "box_count": 1,
+          "source_shape_id": 1,
+          "state_id": 1,
+          "status": "pass"
+        }
+      ],
+      "collision_box_count": 1,
+      "component_count": 1,
+      "components": [
+        {
+          "bounds_max_delta": 0.0,
+          "name": "Body",
+          "normal_max_delta": 0.0,
+          "state_id": 1,
+          "status": "pass",
+          "triangle_count": 12,
+          "vertex_position_max_delta": 0.0
+        }
+      ],
+      "reimport_bounds": [
+        [
+          -0.5,
+          0.0,
+          -0.5
+        ],
+        [
+          0.5,
+          1.0,
+          0.5
+        ]
+      ],
+      "source_bounds": [
+        [
+          -0.5,
+          0.0,
+          -0.5
+        ],
+        [
+          0.5,
+          1.0,
+          0.5
+        ]
+      ],
+      "state_ids": [
+        1
+      ],
+      "status": "pass",
+      "triangle_count": 12
+    },
+    {
+      "aggregate_bounds_max_delta": 0.0,
+      "block_id": "minecraft:torch",
+      "collision": [
+        {
+          "box_count": 0,
+          "source_shape_id": 0,
+          "state_id": 3370,
+          "status": "pass"
+        }
+      ],
+      "collision_box_count": 0,
+      "component_count": 1,
+      "components": [
+        {
+          "bounds_max_delta": 0.0,
+          "name": "Body",
+          "normal_max_delta": 0.0,
+          "state_id": 3370,
+          "status": "pass",
+          "triangle_count": 12,
+          "vertex_position_max_delta": 0.0
+        }
+      ],
+      "reimport_bounds": [
+        [
+          -0.0625,
+          0.0,
+          -0.0625
+        ],
+        [
+          0.0625,
+          0.625,
+          0.0625
+        ]
+      ],
+      "source_bounds": [
+        [
+          -0.0625,
+          0.0,
+          -0.0625
+        ],
+        [
+          0.0625,
+          0.625,
+          0.0625
+        ]
+      ],
+      "state_ids": [
+        3370
+      ],
+      "status": "pass",
+      "triangle_count": 12
+    }
+  ],
+  "source_scene": "FineCraft_GeometryLab",
+  "source_scene_object_count_after": 46,
+  "source_scene_object_count_before": 46,
+  "status": "pass",
+  "temporary_scene": "FineCraft_GeometryExport_RoundTrip.003",
+  "tolerance": 1e-06
+}

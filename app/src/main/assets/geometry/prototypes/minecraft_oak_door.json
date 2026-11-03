@@ -1,0 +1,166 @@
+{
+  "block_id": "minecraft:oak_door",
+  "collision_type": "partial",
+  "coordinate_system": {
+    "axis_order": [
+      "x_east",
+      "y_up",
+      "z_south"
+    ],
+    "blender_to_minecraft": "(x, z, -y)",
+    "coordinate_tolerance": 1e-06,
+    "layout_offsets_removed": true,
+    "prototype_origin": "bottom_centre_of_lower_or_foot_cell",
+    "space": "prototype_local_minecraft",
+    "units_per_block": 1.0
+  },
+  "format": "finecraft-hybrid-geometry",
+  "geometry": {
+    "binary_file": "minecraft_oak_door.geom",
+    "components": [
+      {
+        "index_buffer": {
+          "byte_length": 144,
+          "byte_offset": 876
+        },
+        "index_count": 36,
+        "material": {
+          "base_color_rgba": [
+            0.41999998688697815,
+            0.5,
+            0.5799999833106995,
+            1.0
+          ],
+          "name": "FC_Mat_PartA"
+        },
+        "name": "Body",
+        "source_models": [
+          "minecraft:block/oak_door_top_left"
+        ],
+        "state_id": 5658,
+        "triangle_count": 12,
+        "vertex_buffer": {
+          "byte_length": 864,
+          "byte_offset": 12
+        },
+        "vertex_count": 36
+      },
+      {
+        "index_buffer": {
+          "byte_length": 144,
+          "byte_offset": 1884
+        },
+        "index_count": 36,
+        "material": {
+          "base_color_rgba": [
+            0.6200000047683716,
+            0.6200000047683716,
+            0.6200000047683716,
+            1.0
+          ],
+          "name": "FC_Mat_Body"
+        },
+        "name": "Body",
+        "source_models": [
+          "minecraft:block/oak_door_bottom_left"
+        ],
+        "state_id": 5666,
+        "triangle_count": 12,
+        "vertex_buffer": {
+          "byte_length": 864,
+          "byte_offset": 1020
+        },
+        "vertex_count": 36
+      }
+    ],
+    "header": {
+      "component_count": 2,
+      "header_bytes": 12,
+      "magic_ascii": "FCGB",
+      "version": 1
+    },
+    "index_layout": {
+      "element_bytes": 4,
+      "encoding": "uint32_le"
+    },
+    "vertex_layout": {
+      "attributes": [
+        {
+          "components": 3,
+          "name": "position",
+          "offset_bytes": 0
+        },
+        {
+          "components": 3,
+          "name": "normal",
+          "offset_bytes": 12
+        }
+      ],
+      "encoding": "float32_le",
+      "stride_bytes": 24
+    }
+  },
+  "geometry_type": "multipart_structure",
+  "minecraft_version": "26.2",
+  "prototype_id": 8,
+  "schema_version": 1,
+  "source_commit": "cc78e8696b61b0a20099cccfa42348b5052ff28d",
+  "source_models": [
+    "minecraft:block/oak_door_bottom_left",
+    "minecraft:block/oak_door_top_left"
+  ],
+  "states": [
+    {
+      "collision_boxes": [
+        [
+          -0.5,
+          1.0,
+          0.3125,
+          0.5,
+          2.0,
+          0.5
+        ]
+      ],
+      "collision_type": "partial",
+      "geometry_type": "multipart_structure",
+      "source_models": [
+        "minecraft:block/oak_door_top_left"
+      ],
+      "source_shape_id": 59,
+      "state_id": 5658,
+      "state_properties": {
+        "facing": "north",
+        "half": "upper",
+        "hinge": "left",
+        "open": "false",
+        "powered": "false"
+      }
+    },
+    {
+      "collision_boxes": [
+        [
+          -0.5,
+          0.0,
+          0.3125,
+          0.5,
+          1.0,
+          0.5
+        ]
+      ],
+      "collision_type": "partial",
+      "geometry_type": "multipart_structure",
+      "source_models": [
+        "minecraft:block/oak_door_bottom_left"
+      ],
+      "source_shape_id": 59,
+      "state_id": 5666,
+      "state_properties": {
+        "facing": "north",
+        "half": "lower",
+        "hinge": "left",
+        "open": "false",
+        "powered": "false"
+      }
+    }
+  ]
+}
