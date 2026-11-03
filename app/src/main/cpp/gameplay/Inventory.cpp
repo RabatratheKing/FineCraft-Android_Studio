@@ -13,31 +13,6 @@ void initInventory() {
         inventory[i].itemId = 0;
         inventory[i].count = 0;
     }
-    
-    // Hotbar slots (27-35)
-    inventory[27] = {1, 64}; // Grass
-    inventory[28] = {2, 64}; // Dirt
-    inventory[29] = {3, 64}; // Stone
-    inventory[30] = {4, 64}; // Wood
-    inventory[31] = {5, 64}; // Leaves
-    inventory[32] = {6, 64}; // Water
-    inventory[33] = {7, 64}; // Planks
-    inventory[34] = {8, 64}; // Sand
-    inventory[35] = {9, 64}; // Glass
-    
-    // Top inventory slots for the rest
-    inventory[0] = {10, 64}; // Bricks
-    inventory[1] = {11, 64}; // Gravel
-    inventory[2] = {12, 64}; // Coal Ore
-    inventory[3] = {13, 64}; // Iron Ore
-    inventory[4] = {14, 64}; // Diamond Ore
-    inventory[5] = {15, 64}; // Cobblestone
-    
-    // Additional items
-    inventory[6] = {101, 1}; // Diamond Sword
-    inventory[7] = {102, 1}; // Diamond Pickaxe
-    inventory[8] = {103, 1}; // Wooden Pickaxe
-    inventory[9] = {100, 16}; // Apple
     inventoryVersion++;
 }
 

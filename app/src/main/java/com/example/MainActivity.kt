@@ -61,22 +61,6 @@ class MainActivity : ComponentActivity() {
   
   override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        
-        try {
-            val inputStream = assets.open("atlas.png")
-            val bmp = android.graphics.BitmapFactory.decodeStream(inputStream)
-            if (bmp != null) {
-                loadedAtlasBitmap = bmp.asImageBitmap()
-                val width = bmp.width
-                val height = bmp.height
-                val pixels = IntArray(width * height)
-                bmp.getPixels(pixels, 0, width, 0, 0, width, height)
-                nativeSetAtlasPixels(pixels, width, height)
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-            // Fallback to C++ procedural generation
-        }
 
     settings = SettingsManager(this)
     settings.updateNative()

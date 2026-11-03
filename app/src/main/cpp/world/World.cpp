@@ -37,99 +37,9 @@ void addFace(std::vector<float>& vertices, int x, int y, int z, int faceType, in
 
 void generateChunkData(int cx, int cz, uint8_t tempData[CHUNK_SIZE][CHUNK_HEIGHT][CHUNK_SIZE]) {
     memset(tempData, 0, CHUNK_SIZE * CHUNK_HEIGHT * CHUNK_SIZE);
-    
-    if (settingDebugWorld) {
-        static std::vector<uint16_t> orderedBlocks;
-        if (orderedBlocks.empty()) {
-            for (auto& pair : Registry::getAllBlocks()) {
-                if (pair.first != 0) orderedBlocks.push_back(pair.first);
-            }
-            std::sort(orderedBlocks.begin(), orderedBlocks.end());
-        }
-
-        for (int x = 0; x < CHUNK_SIZE; x++) {
-            for (int z = 0; z < CHUNK_SIZE; z++) {
-                int wx = cx * CHUNK_SIZE + x;
-                int wz = cz * CHUNK_SIZE + z;
-                
-                int index = (wz / 2) * 16 + (wx / 2);
-                
-                for (int y = 0; y < CHUNK_HEIGHT; y++) {
-                    if (y == 10) {
-                        if (wx >= -2 && wz >= -2 && wx < 32 * 16 && wz < 16 * 16) {
-                            tempData[x][y][z] = 9; // Glass floor
-                        } else {
-                            tempData[x][y][z] = 0;
-                        }
-                    } else if (y == 11) {
-                        if (wx >= 0 && wz >= 0 && wx % 2 == 0 && wz % 2 == 0 && index >= 0 && index < orderedBlocks.size()) {
-                            tempData[x][y][z] = orderedBlocks[index];
-                        } else {
-                            tempData[x][y][z] = 0;
-                        }
-                    } else {
-                        tempData[x][y][z] = 0;
-                    }
-                }
-            }
-        }
-        return;
-    }
-    
-    auto getTerrainHeight = [](int wx, int wz) -> int {
-        return (int)round(sin(wx * 0.03f) * 4.0f + cos(wz * 0.03f) * 4.0f + sin(wx * 0.1f + wz * 0.1f) * 2.0f) + 10;
-    };
-
-    for (int x = 0; x < CHUNK_SIZE; x++) {
-        for (int z = 0; z < CHUNK_SIZE; z++) {
-            int worldX = cx * CHUNK_SIZE + x;
-            int worldZ = cz * CHUNK_SIZE + z;
-            int h = getTerrainHeight(worldX, worldZ);
-            for (int y = 0; y < CHUNK_HEIGHT; y++) {
-                if (y > h) {
-                    if (y <= 8) tempData[x][y][z] = 6; // Water
-                    else tempData[x][y][z] = 0;
-                }
-                else if (y == h) {
-                    if (y <= 9) tempData[x][y][z] = 8; // Sand near water
-                    else tempData[x][y][z] = 1; // Grass
-                }
-                else if (y > h - 3) tempData[x][y][z] = 2; // Dirt
-                else tempData[x][y][z] = 3; // Stone
-            }
-        }
-    }
-    
-    int seed = worldSeed ^ (cx * 73856093) ^ (cz * 19349663);
-    
-    // Trees - firmly grounded on terrain surface
-    if ((seed % 100) < 15) {
-        int tx = abs(seed % (CHUNK_SIZE - 4)) + 2;
-        int tz = abs((seed >> 4) % (CHUNK_SIZE - 4)) + 2;
-        int worldX = cx * CHUNK_SIZE + tx;
-        int worldZ = cz * CHUNK_SIZE + tz;
-        int th = getTerrainHeight(worldX, worldZ);
-        
-        if (th > 8 && th + 5 < CHUNK_HEIGHT && tempData[tx][th][tz] == 1) {
-            for(int y = th + 1; y <= th + 4; y++) {
-                if (y < CHUNK_HEIGHT) tempData[tx][y][tz] = 4; // Wood trunk
-            }
-            for(int lx = tx - 2; lx <= tx + 2; lx++) {
-                for(int lz = tz - 2; lz <= tz + 2; lz++) {
-                    for(int ly = th + 3; ly <= th + 5; ly++) {
-                        if (lx >= 0 && lx < CHUNK_SIZE && lz >= 0 && lz < CHUNK_SIZE && ly < CHUNK_HEIGHT) {
-                            if (tempData[lx][ly][lz] == 0) tempData[lx][ly][lz] = 5; // Leaves
-                        }
-                    }
-                }
-            }
-        }
-    }
 }
 
 void buildGreedyMesh(std::vector<float>& vertices, const std::function<uint8_t(int,int,int)>& getBlock) {
-    
-
     auto isOpaque = [](uint8_t b) -> bool {
         if (b == 0) return false;
         return Registry::getBlock(b).opaque;
@@ -157,11 +67,8 @@ void buildGreedyMesh(std::vector<float>& vertices, const std::function<uint8_t(i
                     if (b1 == b2) {
                         mask[n] = 0;
                     } else {
-                        bool draw1 = (b1 != 0 && b1 != 6 && (b2 == 0 || b2 == 5 || b2 == 6 || b2 == 9));
-                        bool draw2 = (b2 != 0 && b2 != 6 && (b1 == 0 || b1 == 5 || b1 == 6 || b1 == 9));
-                        
-                        if (b1 == 6 && b2 == 0) draw1 = true;
-                        if (b2 == 6 && b1 == 0) draw2 = true;
+                        bool draw1 = (b1 != 0);
+                        bool draw2 = (b2 != 0);
                         
                         if (draw1 && !draw2) {
                             mask[n] = b1 | (1 << 8); 
@@ -173,7 +80,6 @@ void buildGreedyMesh(std::vector<float>& vertices, const std::function<uint8_t(i
                             mask[n] = 0;
                         }
                     }
-                    
                     n++;
                 }
             }
@@ -274,7 +180,6 @@ void doGen(ChunkPos pos) {
         it->second.state = ChunkState::Generated;
         it->second.isDirty = true;
         
-        // Mark neighboring chunks dirty so they update boundary faces
         for (int nx = -1; nx <= 1; nx += 2) {
             auto nit = chunks.find({pos.x + nx, pos.z});
             if (nit != chunks.end() && nit->second.state >= ChunkState::Generated) {
@@ -378,10 +283,13 @@ void updateStreaming(int px, int pz) {
     std::vector<std::pair<float, ChunkPos>> toGen;
     std::vector<std::pair<float, ChunkPos>> toMesh;
     
-    for (int dx = -LoadRadius; dx <= LoadRadius; dx++) {
-        for (int dz = -LoadRadius; dz <= LoadRadius; dz++) {
+    int lRad = LoadRadius.load();
+    int mRad = MeshRadius.load();
+
+    for (int dx = -lRad; dx <= lRad; dx++) {
+        for (int dz = -lRad; dz <= lRad; dz++) {
             float distSq = dx*dx + dz*dz;
-            if (distSq <= LoadRadius*LoadRadius) {
+            if (distSq <= lRad*lRad) {
                 ChunkPos pos{px + dx, pz + dz};
                 auto it = chunks.find(pos);
                 if (it == chunks.end()) {
@@ -397,10 +305,10 @@ void updateStreaming(int px, int pz) {
         }
     }
     
-    for (int dx = -MeshRadius; dx <= MeshRadius; dx++) {
-        for (int dz = -MeshRadius; dz <= MeshRadius; dz++) {
+    for (int dx = -mRad; dx <= mRad; dx++) {
+        for (int dz = -mRad; dz <= mRad; dz++) {
             float distSq = dx*dx + dz*dz;
-            if (distSq <= MeshRadius*MeshRadius) {
+            if (distSq <= mRad*mRad) {
                 ChunkPos pos{px + dx, pz + dz};
                 auto it = chunks.find(pos);
                 if (it != chunks.end()) {
@@ -462,8 +370,7 @@ bool isBlockSolid(int x, int y, int z) {
     auto it = chunks.find({cx, cz});
     if (it != chunks.end() && it->second.state >= ChunkState::Generated) {
         uint8_t block = it->second.data[lx][y][lz];
-        return block != 0 && block != 6;
+        return block != 0;
     }
-    return true; // Treat unloaded chunks as solid so player doesn't fall through
+    return false;
 }
-
