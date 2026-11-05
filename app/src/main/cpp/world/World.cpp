@@ -2,6 +2,7 @@
 #include "../gameplay/Registry.h"
 #include "../core/Globals.h"
 #include "../geometry/GeometryAssetLoader.h"
+#include "../geometry/BlockTransform.h"
 #include <functional>
 
 void addFace(std::vector<float>& vertices, int x, int y, int z, int faceType, int blockType) {
@@ -191,7 +192,7 @@ void buildGreedyMesh(std::vector<float>& vertices, const std::function<StateId(i
         }
     }
 
-    // Append loaded prototype geometry for state IDs in chunk
+    // Append loaded prototype geometry for state IDs in chunk using BlockTransform
     for (int gx = 0; gx < CHUNK_SIZE; ++gx) {
         for (int gy = 0; gy < CHUNK_HEIGHT; ++gy) {
             for (int gz = 0; gz < CHUNK_SIZE; ++gz) {
@@ -199,22 +200,13 @@ void buildGreedyMesh(std::vector<float>& vertices, const std::function<StateId(i
                 if (sId != 0 && fincraft::geometry::GeometryManager::hasPrototypeForState(sId)) {
                     const auto* proto = fincraft::geometry::GeometryManager::getPrototypeForState(sId);
                     if (proto) {
+                        fincraft::geometry::BlockTransform transform = fincraft::geometry::BlockTransform::identity();
+                        glm::vec3 worldPos((float)gx, (float)gy, (float)gz);
                         for (const auto& comp : proto->components) {
                             if (comp.stateId == sId || proto->components.size() == 1) {
-                                const auto& v10f = comp.vertices10f;
-                                for (size_t i = 0; i < v10f.size(); i += 10) {
-                                    float vx = v10f[i + 0] + (float)gx;
-                                    float vy = v10f[i + 1] + (float)gy;
-                                    float vz = v10f[i + 2] + (float)gz;
-                                    float u  = v10f[i + 3];
-                                    float v  = v10f[i + 4];
-                                    float tex = v10f[i + 5];
-                                    float nx = v10f[i + 6];
-                                    float ny = v10f[i + 7];
-                                    float nz = v10f[i + 8];
-                                    float ao = v10f[i + 9];
-                                    vertices.insert(vertices.end(), {vx, vy, vz, u, v, tex, nx, ny, nz, ao});
-                                }
+                                std::vector<float> transformedVertices;
+                                transform.transformVertices10f(comp.vertices10f, transformedVertices, worldPos);
+                                vertices.insert(vertices.end(), transformedVertices.begin(), transformedVertices.end());
                             }
                         }
                     }

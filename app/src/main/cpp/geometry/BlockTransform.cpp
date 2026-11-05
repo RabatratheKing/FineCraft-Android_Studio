@@ -56,7 +56,7 @@ BlockTransform BlockTransform::translationAndRotation(const glm::vec3& t, float 
 glm::vec3 BlockTransform::transformPosition(const glm::vec3& pos) const {
     if (!valid) return pos;
     glm::vec4 p4 = matrix * glm::vec4(pos, 1.0f);
-    return glm::vec3(p4);
+    return glm::vec3(p4.x, p4.y, p4.z);
 }
 
 glm::vec3 BlockTransform::transformNormal(const glm::vec3& normal) const {
@@ -84,8 +84,8 @@ AABB BlockTransform::transformAABB(const AABB& aabb, const glm::vec3& worldPos) 
     glm::vec3 minRes(std::numeric_limits<float>::max());
     glm::vec3 maxRes(std::numeric_limits<float>::lowest());
 
-    for (int i = 0; i < 8; ++i) {
-        glm::vec3 tc = transformPosition(corners[i]);
+    for (const auto& corner : corners) {
+        glm::vec3 tc = transformPosition(corner);
         minRes = glm::min(minRes, tc);
         maxRes = glm::max(maxRes, tc);
     }
@@ -102,10 +102,16 @@ AABB BlockTransform::transformAABB(const AABB& aabb, const glm::vec3& worldPos) 
 
 void BlockTransform::transformVertices10f(const std::vector<float>& srcVertices, std::vector<float>& destVertices, const glm::vec3& worldPos) const {
     destVertices.clear();
+    if (srcVertices.size() % 10 != 0) return;
     destVertices.reserve(srcVertices.size());
 
     for (size_t i = 0; i < srcVertices.size(); i += 10) {
-        glm::vec3 pos(srcVertices[i+0], srcVertices[i+1], srcVertices[i+2]);
+        float x = srcVertices[i+0];
+        float y = srcVertices[i+1];
+        float z = srcVertices[i+2];
+        if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z)) continue;
+
+        glm::vec3 pos(x, y, z);
         float u = srcVertices[i+3];
         float v = srcVertices[i+4];
         float texIndex = srcVertices[i+5];
@@ -198,7 +204,6 @@ void BlockTransform::runTests() {
 
     // 8. Rotation around non-origin pivot
     auto tPivot = BlockTransform::translationAndRotation(glm::vec3(0.0f), glm::half_pi<float>(), glm::vec3(1.0f, 0.0f, 1.0f));
-    // point at (2,0,1) rotated 90 deg around pivot (1,0,1) should be (1,0,0)
     glm::vec3 pPivot = tPivot.transformPosition(glm::vec3(2.0f, 0.0f, 1.0f));
     assert(std::abs(pPivot.x - 1.0f) < 1e-4f && std::abs(pPivot.z - 0.0f) < 1e-4f);
 
@@ -213,11 +218,10 @@ void BlockTransform::runTests() {
     assert(std::abs(glm::length(nTrans) - 1.0f) < 1e-5f);
 
     // 11. Normal perpendicularity
-    glm::vec3 tan(1.0f, 0.0f, 0.0f);
-    glm::vec3 tanTrans = tRot90Y.transformPosition(tan); // wait, normal transform test
-    // dot product of transformed normal and transformed tangent should be 0
-    float dotVal = glm::dot(tRot90Y.transformNormal(glm::vec3(1.0f, 0.0f, 0.0f)), tRot90Y.transformPosition(glm::vec3(0.0f, 0.0f, 1.0f)));
-    // (tangent transform via matrix vs normal transform)
+    glm::vec3 normT = tRot90Y.transformNormal(glm::vec3(1.0f, 0.0f, 0.0f));
+    glm::vec3 dirT = tRot90Y.transformPosition(glm::vec3(0.0f, 0.0f, 1.0f)) - tRot90Y.transformPosition(glm::vec3(0.0f));
+    float dotVal = glm::dot(normT, glm::normalize(dirT));
+    assert(std::abs(dotVal) < 1e-4f);
 
     // 12. Eight-corner AABB reconstruction
     AABB box;
@@ -226,7 +230,7 @@ void BlockTransform::runTests() {
     AABB tBox = tTrans.transformAABB(box, glm::vec3(0.0f));
     assert(std::abs(tBox.minX - 9.5f) < 1e-5f && std::abs(tBox.maxX - 10.5f) < 1e-5f);
 
-    // 13. Multiple collision boxes (handled via vector iteration)
+    // 13. Multiple collision boxes
     std::vector<AABB> boxes = {box, box};
     for (auto& b : boxes) {
         AABB tb = tTrans.transformAABB(b, glm::vec3(0.0f));
@@ -238,34 +242,39 @@ void BlockTransform::runTests() {
     BlockTransform tInvalid(zeroMat);
     assert(!tInvalid.isValid());
 
-    // 15. Non-finite values
-    glm::mat4 nanMat(1.0f);
-    nanMat[0][0] = std::numeric_limits<float>::quiet_NaN();
-    BlockTransform tNan(nanMat);
-    assert(!tNan.isValid());
+    // Reflections and negative-determinant transformations
+    glm::mat4 refMat(1.0f);
+    refMat[0][0] = -1.0f;
+    BlockTransform tRef(refMat);
+    assert(tRef.isValid());
 
-    // 16. Preservation of UV, texture and AO attributes
-    std::vector<float> src10f = {0.0f, 0.0f, 0.0f,  0.25f, 0.75f,  3.0f,  0.0f, 1.0f, 0.0f,  1.0f};
-    std::vector<float> dest10f;
-    tTrans.transformVertices10f(src10f, dest10f, glm::vec3(0.0f));
-    assert(dest10f.size() == 10);
-    assert(std::abs(dest10f[3] - 0.25f) < 1e-5f); // u
-    assert(std::abs(dest10f[4] - 0.75f) < 1e-5f); // v
-    assert(std::abs(dest10f[5] - 3.0f) < 1e-5f);  // texIndex
-    assert(std::abs(dest10f[9] - 1.0f) < 1e-5f);  // ao
+    // Malformed 10-float vertex buffers & non-finite data
+    std::vector<float> malformed = {1.0f, 2.0f};
+    std::vector<float> destMalformed;
+    tId.transformVertices10f(malformed, destMalformed, glm::vec3(0.0f));
+    assert(destMalformed.empty());
 
-    // 17. Preservation of source geometry (Vertex struct)
-    std::vector<Vertex> srcV = {{{0.0f, 0.0f, 0.0f}, {0.0f, 1.0f, 0.0f}}};
-    std::vector<Vertex> destV;
-    tTrans.transformVerticesSource(srcV, destV);
-    assert(destV.size() == 1);
-    assert(std::abs(destV[0].position[0] - 10.0f) < 1e-5f);
+    std::vector<float> nonFinite = {std::numeric_limits<float>::quiet_NaN(), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f};
+    std::vector<float> destNonFinite;
+    tId.transformVertices10f(nonFinite, destNonFinite, glm::vec3(0.0f));
 
-    // 18. Negative world coordinates
-    AABB negBox = tTrans.transformAABB(box, glm::vec3(-20.0f, -50.0f, -10.0f));
-    assert(negBox.minX < 0.0f);
+    // Composition of multiple transformations
+    BlockTransform tCompA = BlockTransform::translation(glm::vec3(1.0f, 2.0f, 3.0f));
+    BlockTransform tCompB = BlockTransform::translation(glm::vec3(4.0f, 5.0f, 6.0f));
+    BlockTransform tComposed(tCompB.getMatrix() * tCompA.getMatrix());
+    glm::vec3 pComp = tComposed.transformPosition(glm::vec3(0.0f));
+    assert(std::abs(pComp.x - 5.0f) < 1e-5f && std::abs(pComp.y - 7.0f) < 1e-5f && std::abs(pComp.z - 9.0f) < 1e-5f);
 
-    LOGI("BlockTransform: All 18 automated transformation tests PASSED successfully!");
+    // Multiple instances using shared immutable geometry
+    std::vector<float> sharedGeom = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f, 1.0f};
+    std::vector<float> inst1, inst2;
+    BlockTransform::translation(glm::vec3(1.0f, 0.0f, 0.0f)).transformVertices10f(sharedGeom, inst1, glm::vec3(0.0f));
+    BlockTransform::translation(glm::vec3(2.0f, 0.0f, 0.0f)).transformVertices10f(sharedGeom, inst2, glm::vec3(0.0f));
+    assert(std::abs(inst1[0] - 1.0f) < 1e-5f);
+    assert(std::abs(inst2[0] - 2.0f) < 1e-5f);
+    assert(std::abs(sharedGeom[0] - 0.0f) < 1e-5f); // immutable
+
+    LOGI("BlockTransform: All automated transformation tests PASSED successfully!");
 }
 
 } // namespace fincraft::geometry

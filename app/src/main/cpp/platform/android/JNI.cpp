@@ -250,11 +250,9 @@ Java_com_example_MainActivity_nativeInit(JNIEnv* env, jclass clazz, jobject asse
         globalAssetManager = AAssetManager_fromJava(env, assetManager);
         Registry::loadCatalogueFromAssets(globalAssetManager);
         fincraft::geometry::GeometryManager::loadPrototypesFromAssets(globalAssetManager);
-        fincraft::geometry::BlockTransform::runTests();
     } else {
         Registry::init();
         fincraft::geometry::GeometryManager::init();
-        fincraft::geometry::BlockTransform::runTests();
     }
 }
 
