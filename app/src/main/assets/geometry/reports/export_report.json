@@ -1,0 +1,196 @@
+{
+  "assets": [
+    {
+      "block_id": "minecraft:oak_door",
+      "collision_box_count": 2,
+      "duplicate_triangles_removed": 0,
+      "geometry_bytes": 2028,
+      "geometry_file": "minecraft_oak_door.geom",
+      "geometry_sha256": "2c6a1729bb3b639a2fbf75dbddf90c8c18f53410a75e668264f3d31ccb230da5",
+      "metadata_bytes": 3933,
+      "metadata_file": "minecraft_oak_door.json",
+      "prototype_id": 8,
+      "state_ids": [
+        5658,
+        5666
+      ],
+      "triangle_count": 24,
+      "visual_component_count": 2
+    },
+    {
+      "block_id": "minecraft:oak_stairs",
+      "collision_box_count": 2,
+      "duplicate_triangles_removed": 0,
+      "geometry_bytes": 2028,
+      "geometry_file": "minecraft_oak_stairs.geom",
+      "geometry_sha256": "a04211e7045597ce0e1d6a866701ae820f2f976e6f5db263c79033b53f3d1e52",
+      "metadata_bytes": 2735,
+      "metadata_file": "minecraft_oak_stairs.json",
+      "prototype_id": 3,
+      "state_ids": [
+        3918
+      ],
+      "triangle_count": 24,
+      "visual_component_count": 1
+    },
+    {
+      "block_id": "minecraft:stone",
+      "collision_box_count": 1,
+      "duplicate_triangles_removed": 0,
+      "geometry_bytes": 1020,
+      "geometry_file": "minecraft_stone.geom",
+      "geometry_sha256": "e7805e097e155b0490e9329a3d22967d213bedf26d9ea84a93360049d1bab0f5",
+      "metadata_bytes": 2433,
+      "metadata_file": "minecraft_stone.json",
+      "prototype_id": 1,
+      "state_ids": [
+        1
+      ],
+      "triangle_count": 12,
+      "visual_component_count": 1
+    },
+    {
+      "block_id": "minecraft:torch",
+      "collision_box_count": 0,
+      "duplicate_triangles_removed": 0,
+      "geometry_bytes": 1020,
+      "geometry_file": "minecraft_torch.geom",
+      "geometry_sha256": "74450e2510c58428c826e91868eee33351caf4daef721b6db170225e8e49784a",
+      "metadata_bytes": 2328,
+      "metadata_file": "minecraft_torch.json",
+      "prototype_id": 6,
+      "state_ids": [
+        3370
+      ],
+      "triangle_count": 12,
+      "visual_component_count": 1
+    }
+  ],
+  "collision_source_validation": "mesh-island bounds compared with embedded FC_Catalogue_Payload boxes",
+  "coordinate_round_trip_samples": [
+    {
+      "input_blender": [
+        0,
+        0,
+        0
+      ],
+      "pass": true,
+      "round_trip_blender": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "input_blender": [
+        1,
+        1,
+        1
+      ],
+      "pass": true,
+      "round_trip_blender": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "input_blender": [
+        -3,
+        12,
+        7
+      ],
+      "pass": true,
+      "round_trip_blender": [
+        -3.0,
+        12.0,
+        7.0
+      ]
+    },
+    {
+      "input_blender": [
+        0.125,
+        0.375,
+        0.9375
+      ],
+      "pass": true,
+      "round_trip_blender": [
+        0.125,
+        0.375,
+        0.9375
+      ]
+    }
+  ],
+  "coordinate_tolerance": 1e-06,
+  "export_mode": "selected_blocks",
+  "requested_block_ids": [
+    "minecraft:oak_door",
+    "minecraft:oak_stairs",
+    "minecraft:stone",
+    "minecraft:torch"
+  ],
+  "scene": "FineCraft_GeometryLab",
+  "schema_version": 1,
+  "source_collision_validation": {
+    "minecraft:oak_door": {
+      "states": [
+        {
+          "box_count": 1,
+          "shape_id": 59,
+          "state_id": 5658,
+          "status": "pass"
+        },
+        {
+          "box_count": 1,
+          "shape_id": 59,
+          "state_id": 5666,
+          "status": "pass"
+        }
+      ],
+      "status": "pass"
+    },
+    "minecraft:oak_stairs": {
+      "states": [
+        {
+          "box_count": 2,
+          "shape_id": 33,
+          "state_id": 3918,
+          "status": "pass"
+        }
+      ],
+      "status": "pass"
+    },
+    "minecraft:stone": {
+      "states": [
+        {
+          "box_count": 1,
+          "shape_id": 1,
+          "state_id": 1,
+          "status": "pass"
+        }
+      ],
+      "status": "pass"
+    },
+    "minecraft:torch": {
+      "states": [
+        {
+          "box_count": 0,
+          "shape_id": 0,
+          "state_id": 3370,
+          "status": "pass"
+        }
+      ],
+      "status": "pass"
+    }
+  },
+  "status": "pass",
+  "summary": {
+    "collision_box_count": 5,
+    "geometry_bytes": 6096,
+    "metadata_bytes": 11429,
+    "prototype_count": 4,
+    "state_record_count": 5,
+    "triangle_count": 72,
+    "visual_component_count": 5
+  }
+}

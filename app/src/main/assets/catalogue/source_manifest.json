@@ -1,0 +1,42 @@
+{
+  "repository": "https://github.com/Complexity-ML/minecraft-data-26.2",
+  "commit": "2a6a5fd9ebb0d964a73312d11beef596b7ec029b",
+  "data_path": "data/pc/26.2",
+  "edition": "Minecraft Java Edition",
+  "version": "26.2",
+  "line_endings": "LF",
+  "files": {
+    "blocks.json": {
+      "sha256": "741f9982f06d0ddddb21e4d578d6e72528a4a5322e19a8ae7803e32d3f19a760",
+      "bytes": 887606,
+      "git_blob_sha1": "0d30a3bb8ffb00d98411702562d75be57e6a1844"
+    },
+    "blockCollisionShapes.json": {
+      "sha256": "23a18aac954245e463ec29244082c6ff3fa15a9b8b9709dfc1fde6598adcfb53",
+      "bytes": 2144253,
+      "git_blob_sha1": "843603a3ac83ab7fb8af01469722eec42b70609a"
+    },
+    "materials.json": {
+      "sha256": "613621936c666a59258eb836292a0d19cd0647e2d5c95b5a763c900e30c21a9f",
+      "bytes": 3857,
+      "git_blob_sha1": "07297f08557bc0b15c9a0177e2487924745d6653"
+    },
+    "items.json": {
+      "sha256": "a0b334b6e8f9583f8d2ae07fb65c201022ee06b1e8a43beb556140e9d8ef2743",
+      "bytes": 193004,
+      "git_blob_sha1": "b79e6b5d79e74bf4589f48d55bb6cf4fc3215be6"
+    }
+  },
+  "official_26_2": {
+    "server_reports": {
+      "blocks_sha256": "dec22eb9547b0bbea396cbf35569f7ec81b7be662775ce03dc2236227473af7b",
+      "registries_sha256": "9f34d4deb0b494627f6a1a1590e7fb21c11a3949d84bacb59a304e6315287b24",
+      "item_block_state_components_sha256": "85126a61b899cb06bf49f6333caeb402736bf5bbe0a2d2cae1f258cc9dde6055",
+      "server_jar_sha1": "823e2250d24b3ddac457a60c92a6a941943fcd6a",
+      "generated_by": "Mojang net.minecraft.data.Main --reports --output"
+    },
+    "client_geometry_sha256": "fe9d79757a51cdf4746438adfca1d5528957225cb73b50edf0b6ccf00acce557",
+    "client_jar_sha1": "2dc72797acbc1b63fc16a11c4ac393605f453754",
+    "extractor": "tools/catalogue/extract_mojang_client_geometry.py"
+  }
+}
