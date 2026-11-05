@@ -17,7 +17,7 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(json)
 
-add_library(finecraft SHARED rendering/Renderer.cpp platform/android/JNI.cpp core/Globals.cpp world/World.cpp world/SaveManager.cpp player/Physics.cpp gameplay/Raycast.cpp gameplay/Inventory.cpp gameplay/Registry.cpp world/ChunkManager.cpp geometry/GeometryAssetLoader.cpp)
+add_library(finecraft SHARED rendering/Renderer.cpp platform/android/JNI.cpp core/Globals.cpp world/World.cpp world/SaveManager.cpp player/Physics.cpp gameplay/Raycast.cpp gameplay/Inventory.cpp gameplay/Registry.cpp world/ChunkManager.cpp geometry/GeometryAssetLoader.cpp geometry/BlockTransform.cpp)
 
 find_library(log-lib log)
 find_library(android-lib android)

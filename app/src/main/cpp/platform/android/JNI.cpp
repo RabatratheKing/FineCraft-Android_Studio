@@ -11,6 +11,7 @@
 #include "rendering/Renderer.h"
 #include "world/ChunkManager.h"
 #include "geometry/GeometryAssetLoader.h"
+#include "geometry/BlockTransform.h"
 #include <android/asset_manager.h>
 #include <android/asset_manager_jni.h>
 
@@ -249,9 +250,11 @@ Java_com_example_MainActivity_nativeInit(JNIEnv* env, jclass clazz, jobject asse
         globalAssetManager = AAssetManager_fromJava(env, assetManager);
         Registry::loadCatalogueFromAssets(globalAssetManager);
         fincraft::geometry::GeometryManager::loadPrototypesFromAssets(globalAssetManager);
+        fincraft::geometry::BlockTransform::runTests();
     } else {
         Registry::init();
         fincraft::geometry::GeometryManager::init();
+        fincraft::geometry::BlockTransform::runTests();
     }
 }
 
