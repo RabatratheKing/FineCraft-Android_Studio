@@ -257,7 +257,18 @@ namespace SaveManager {
                 for (int x = 0; x < CHUNK_SIZE; ++x) {
                     for (int y = 0; y < CHUNK_HEIGHT; ++y) {
                         for (int z = 0; z < CHUNK_SIZE; ++z) {
-                            cTemp.data[x][y][z] = Registry::getDefaultStateIdForLegacyId(legacyData[x][y][z]);
+                            uint8_t leg = legacyData[x][y][z];
+                            if (leg == 6) { // Oak Door reconstruction
+                                if (y + 1 < CHUNK_HEIGHT && legacyData[x][y + 1][z] == 6) {
+                                    cTemp.data[x][y][z] = 5666; // Lower half
+                                } else if (y > 0 && legacyData[x][y - 1][z] == 6) {
+                                    cTemp.data[x][y][z] = 5658; // Upper half
+                                } else {
+                                    cTemp.data[x][y][z] = 5666;
+                                }
+                            } else {
+                                cTemp.data[x][y][z] = Registry::getDefaultStateIdForLegacyId(leg);
+                            }
                         }
                     }
                 }
