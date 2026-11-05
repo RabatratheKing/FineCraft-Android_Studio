@@ -254,20 +254,47 @@ namespace SaveManager {
             } else {
                 uint8_t legacyData[CHUNK_SIZE][CHUNK_HEIGHT][CHUNK_SIZE];
                 in.read((char*)legacyData, CHUNK_SIZE * CHUNK_HEIGHT * CHUNK_SIZE * sizeof(uint8_t));
+
+                // Initialize non-door blocks
                 for (int x = 0; x < CHUNK_SIZE; ++x) {
                     for (int y = 0; y < CHUNK_HEIGHT; ++y) {
                         for (int z = 0; z < CHUNK_SIZE; ++z) {
                             uint8_t leg = legacyData[x][y][z];
-                            if (leg == 6) { // Oak Door reconstruction
-                                if (y + 1 < CHUNK_HEIGHT && legacyData[x][y + 1][z] == 6) {
-                                    cTemp.data[x][y][z] = 5666; // Lower half
-                                } else if (y > 0 && legacyData[x][y - 1][z] == 6) {
-                                    cTemp.data[x][y][z] = 5658; // Upper half
-                                } else {
-                                    cTemp.data[x][y][z] = 5666;
-                                }
-                            } else {
+                            if (leg != 6) {
                                 cTemp.data[x][y][z] = Registry::getDefaultStateIdForLegacyId(leg);
+                            }
+                        }
+                    }
+                }
+
+                // Process oak doors column-by-column (x, z) to detect maximal vertical runs
+                for (int x = 0; x < CHUNK_SIZE; ++x) {
+                    for (int z = 0; z < CHUNK_SIZE; ++z) {
+                        int y = 0;
+                        while (y < CHUNK_HEIGHT) {
+                            if (legacyData[x][y][z] == 6) {
+                                int yStart = y;
+                                int yEnd = yStart;
+                                while (yEnd + 1 < CHUNK_HEIGHT && legacyData[x][yEnd + 1][z] == 6) {
+                                    yEnd++;
+                                }
+
+                                int runLength = (yEnd - yStart) + 1;
+                                for (int offset = 0; offset < runLength; ++offset) {
+                                    int currY = yStart + offset;
+                                    if (offset % 2 == 0) {
+                                        cTemp.data[x][currY][z] = 5666; // Lower half (even offset)
+                                    } else {
+                                        cTemp.data[x][currY][z] = 5658; // Upper half (odd offset)
+                                    }
+                                }
+                                // Note: Unpaired final blocks (odd run lengths like 3 or 5)
+                                // receive lower state (5666) as a deterministic safe fallback.
+                                // Original pairing cannot always be uniquely recovered from legacy flat ID data.
+
+                                y = yEnd + 1;
+                            } else {
+                                y++;
                             }
                         }
                     }
