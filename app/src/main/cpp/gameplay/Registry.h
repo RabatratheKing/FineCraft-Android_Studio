@@ -5,6 +5,7 @@
 #include <vector>
 #include <istream>
 #include <android/asset_manager.h>
+#include "../core/Globals.h"
 
 struct AABB {
     float minX = 0.0f, minY = 0.0f, minZ = 0.0f;
@@ -71,6 +72,7 @@ public:
 
     static float getBlockTexIndex(uint16_t blockId, int faceType);
     static int getItemSprite(uint16_t itemId);
+    static StateId getDefaultStateIdForLegacyId(uint8_t legacyId);
 
 private:
     static std::unordered_map<uint16_t, BlockDefinition> blocks;

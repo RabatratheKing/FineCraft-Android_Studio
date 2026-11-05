@@ -5,19 +5,10 @@
 #include "../world/World.h"
 #include "../player/Physics.h"
 
-float getBlockHardness(uint8_t blockId) {
-    switch (blockId) {
-        case 1: return 0.5f; // Grass
-        case 2: return 0.5f; // Dirt
-        case 3: return 1.5f; // Stone
-        case 4: return 1.0f; // Wood
-        case 5: return 0.2f; // Leaves
-        case 7: return 1.0f; // Planks
-        case 8: return 0.3f; // Sand
-        case 10: return 0.5f; // Scaffolding
-        case 6: return -1.0f; // Water (unbreakable)
-        default: return 1.0f;
-    }
+float getBlockHardness(StateId stateId) {
+    const auto& def = Registry::getBlockForState(stateId);
+    if (!def.solid) return 0.0f;
+    return def.hardness;
 }
 
 RaycastHit getTargetBlock() {
@@ -51,8 +42,8 @@ RaycastHit getTargetBlock() {
         if (by >= 0 && by < CHUNK_HEIGHT) {
             std::lock_guard<std::mutex> lock(worldMutex);
             if (chunks.find({cx, cz}) != chunks.end() && chunks[{cx, cz}].state >= ChunkState::Generated) {
-                uint8_t currentBlock = chunks[{cx, cz}].data[lx][by][lz];
-                if (currentBlock != 0 && currentBlock != 6) { // solid block (not air, not water)
+                StateId currentBlock = chunks[{cx, cz}].data[lx][by][lz];
+                if (currentBlock != 0 && Registry::getBlockForState(currentBlock).solid) {
                     int px = bx, py = by, pz = bz;
                     glm::vec3 normal(0.0f);
                     if (prevBlock.x != -1.0f) {
@@ -97,7 +88,7 @@ void tickInteraction(float dt) {
 
     if (inputBreak.load()) {
         if (breakCooldown.load() <= 0.0f) {
-            uint8_t targetBlockId = 0;
+            StateId targetStateId = 0;
             int cx = hit.bx / CHUNK_SIZE;
             int cz = hit.bz / CHUNK_SIZE;
             if (hit.bx < 0 && hit.bx % CHUNK_SIZE != 0) cx -= 1;
@@ -108,11 +99,11 @@ void tickInteraction(float dt) {
             {
                 std::lock_guard<std::mutex> lock(worldMutex);
                 if (chunks.find({cx, cz}) != chunks.end()) {
-                    targetBlockId = chunks[{cx, cz}].data[lx][hit.by][lz];
+                    targetStateId = chunks[{cx, cz}].data[lx][hit.by][lz];
                 }
             }
 
-            float hardness = getBlockHardness(targetBlockId);
+            float hardness = getBlockHardness(targetStateId);
             if (hardness > 0.0f) {
                 float mProg = miningProgress.load() + (dt / hardness);
                 miningProgress.store(mProg);
@@ -120,7 +111,8 @@ void tickInteraction(float dt) {
                     miningProgress.store(0.0f);
                     breakCooldown.store(0.2f);
                     
-                    if (addItem(targetBlockId, 1)) {
+                    uint16_t baseBlockId = Registry::getBlockIdForState(targetStateId);
+                    if (addItem(baseBlockId, 1)) {
                         std::lock_guard<std::mutex> lock(worldMutex);
                         chunks[{cx, cz}].data[lx][hit.by][lz] = 0;
                         chunks[{cx, cz}].isDirty = true;

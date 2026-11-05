@@ -11,4 +11,4 @@ struct RaycastHit {
 
 void tickInteraction(float dt);
 RaycastHit getTargetBlock();
-float getBlockHardness(uint8_t blockId);
+float getBlockHardness(StateId stateId);

@@ -23,6 +23,7 @@ extern int height;
 
 const int CHUNK_SIZE = 16;
 const int CHUNK_HEIGHT = 32;
+using StateId = uint16_t;
 
 struct ChunkPos {
     int x, z;
@@ -59,7 +60,7 @@ enum class ChunkState {
 
 struct Chunk {
     ChunkState state = ChunkState::Unloaded;
-    uint8_t data[CHUNK_SIZE][CHUNK_HEIGHT][CHUNK_SIZE];
+    StateId data[CHUNK_SIZE][CHUNK_HEIGHT][CHUNK_SIZE];
     GLuint VAO = 0;
     GLuint VBO = 0;
     int vertexCount = 0;

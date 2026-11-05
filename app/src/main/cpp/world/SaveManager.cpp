@@ -1,6 +1,7 @@
 #include "SaveManager.h"
 #include "../core/Globals.h"
 #include "../gameplay/Inventory.h"
+#include "../gameplay/Registry.h"
 #include <fstream>
 #include <vector>
 #include <stdio.h>
@@ -36,10 +37,10 @@ namespace SaveManager {
             return;
         }
         
-        // Header (Magic: FINC, Version: 2)
+        // Header (Magic: FINC, Version: 3)
         const char magic[4] = {'F','I','N','C'};
         out.write(magic, 4);
-        uint32_t version = 2;
+        uint32_t version = 3;
         out.write((char*)&version, sizeof(version));
         
         int seed = worldSeed.load();
@@ -82,13 +83,13 @@ namespace SaveManager {
             out.write((char*)&craftCopy[i].count, sizeof(uint16_t));
         }
         
-        std::vector<std::pair<ChunkPos, std::vector<uint8_t>>> chunksToSave;
+        std::vector<std::pair<ChunkPos, std::vector<StateId>>> chunksToSave;
         {
             std::lock_guard<std::mutex> lock(worldMutex);
             for (const auto& pair : chunks) {
                 if (pair.second.isModified && pair.second.state >= ChunkState::Generated) {
-                    std::vector<uint8_t> dataBuf(CHUNK_SIZE * CHUNK_HEIGHT * CHUNK_SIZE);
-                    memcpy(dataBuf.data(), pair.second.data, CHUNK_SIZE * CHUNK_HEIGHT * CHUNK_SIZE);
+                    std::vector<StateId> dataBuf(CHUNK_SIZE * CHUNK_HEIGHT * CHUNK_SIZE);
+                    memcpy(dataBuf.data(), pair.second.data, sizeof(pair.second.data));
                     chunksToSave.push_back({pair.first, std::move(dataBuf)});
                 }
             }
@@ -100,7 +101,7 @@ namespace SaveManager {
         for (const auto& c : chunksToSave) {
             out.write((char*)&c.first.x, sizeof(int));
             out.write((char*)&c.first.z, sizeof(int));
-            out.write((char*)c.second.data(), CHUNK_SIZE * CHUNK_HEIGHT * CHUNK_SIZE);
+            out.write((char*)c.second.data(), CHUNK_SIZE * CHUNK_HEIGHT * CHUNK_SIZE * sizeof(StateId));
         }
         
         out.flush();
@@ -115,7 +116,7 @@ namespace SaveManager {
         if (rename(tmpPath.c_str(), saveFilePath.c_str()) != 0) {
             LOGE("Failed to rename temp save file");
         } else {
-            LOGI("Game saved successfully");
+            LOGI("Game saved successfully (version 3)");
         }
     }
 
@@ -142,7 +143,7 @@ namespace SaveManager {
         
         uint32_t version;
         in.read((char*)&version, sizeof(version));
-        if (!in || (version != 1 && version != 2)) {
+        if (!in || (version < 1 || version > 3)) {
             LOGE("Unsupported save file version: %u, starting new game", version);
             NewGame();
             return false;
@@ -222,7 +223,7 @@ namespace SaveManager {
 
         struct LoadedChunkTemp {
             int cx, cz;
-            uint8_t data[CHUNK_SIZE][CHUNK_HEIGHT][CHUNK_SIZE];
+            StateId data[CHUNK_SIZE][CHUNK_HEIGHT][CHUNK_SIZE];
         };
         std::vector<LoadedChunkTemp> loadedChunks;
         loadedChunks.reserve(numChunks);
@@ -237,13 +238,31 @@ namespace SaveManager {
                 return false;
             }
             if (abs(cx) > 1000 || abs(cz) > 1000) {
-                in.seekg(CHUNK_SIZE * CHUNK_HEIGHT * CHUNK_SIZE, std::ios::cur);
+                if (version == 3) {
+                    in.seekg(CHUNK_SIZE * CHUNK_HEIGHT * CHUNK_SIZE * sizeof(StateId), std::ios::cur);
+                } else {
+                    in.seekg(CHUNK_SIZE * CHUNK_HEIGHT * CHUNK_SIZE * sizeof(uint8_t), std::ios::cur);
+                }
                 continue;
             }
             LoadedChunkTemp cTemp{};
             cTemp.cx = cx;
             cTemp.cz = cz;
-            in.read((char*)cTemp.data, CHUNK_SIZE * CHUNK_HEIGHT * CHUNK_SIZE);
+
+            if (version == 3) {
+                in.read((char*)cTemp.data, CHUNK_SIZE * CHUNK_HEIGHT * CHUNK_SIZE * sizeof(StateId));
+            } else {
+                uint8_t legacyData[CHUNK_SIZE][CHUNK_HEIGHT][CHUNK_SIZE];
+                in.read((char*)legacyData, CHUNK_SIZE * CHUNK_HEIGHT * CHUNK_SIZE * sizeof(uint8_t));
+                for (int x = 0; x < CHUNK_SIZE; ++x) {
+                    for (int y = 0; y < CHUNK_HEIGHT; ++y) {
+                        for (int z = 0; z < CHUNK_SIZE; ++z) {
+                            cTemp.data[x][y][z] = Registry::getDefaultStateIdForLegacyId(legacyData[x][y][z]);
+                        }
+                    }
+                }
+            }
+
             if (!in) {
                 LOGE("Corrupt save file reading chunk data, starting new game");
                 NewGame();
@@ -287,14 +306,14 @@ namespace SaveManager {
             for (const auto& cTemp : loadedChunks) {
                 ChunkPos pos{cTemp.cx, cTemp.cz};
                 Chunk& c = chunks[pos];
-                memcpy(c.data, cTemp.data, CHUNK_SIZE * CHUNK_HEIGHT * CHUNK_SIZE);
+                memcpy(c.data, cTemp.data, sizeof(c.data));
                 c.state = ChunkState::Generated;
                 c.isDirty = true;
                 c.isModified = true;
             }
         }
         
-        LOGI("Game loaded successfully (version %u)", version);
+        LOGI("Game loaded successfully (version %u migrated to v3)", version);
         return true;
     }
 

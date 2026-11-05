@@ -18,10 +18,10 @@ bool checkCollision(glm::vec3 pos, glm::vec3 size) {
     for (int x = minX; x <= maxX; x++) {
         for (int y = minY; y <= maxY; y++) {
             for (int z = minZ; z <= maxZ; z++) {
-                uint8_t blockId = getBlockAt(glm::vec3(x + 0.5f, (float)y, z + 0.5f));
-                if (blockId == 0) continue;
+                StateId stateId = getBlockAt(glm::vec3(x + 0.5f, (float)y, z + 0.5f));
+                if (stateId == 0) continue;
 
-                const auto& boxes = Registry::getCollisionBoxesForBlock(blockId);
+                const auto& boxes = Registry::getCollisionBoxesForState(stateId);
                 if (boxes.empty()) continue;
 
                 for (const auto& box : boxes) {
@@ -40,7 +40,7 @@ bool checkCollision(glm::vec3 pos, glm::vec3 size) {
     return false;
 }
 
-uint8_t getBlockAt(glm::vec3 pos) {
+StateId getBlockAt(glm::vec3 pos) {
     int bx = floor(pos.x);
     int by = floor(pos.y);
     int bz = floor(pos.z);

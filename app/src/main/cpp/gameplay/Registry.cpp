@@ -299,3 +299,16 @@ const std::unordered_map<uint16_t, BlockDefinition>& Registry::getAllBlocks() {
     return blocks;
 }
 
+StateId Registry::getDefaultStateIdForLegacyId(uint8_t legacyId) {
+    switch (legacyId) {
+        case 0: return 0;    // Air
+        case 1: return 2;    // Grass Block
+        case 2: return 2;    // Dirt
+        case 3: return 1;    // Stone
+        case 4: return 3918; // Oak Stairs
+        case 5: return 3370; // Torch
+        case 6: return 5666; // Oak Door (lower)
+        default: return 0;
+    }
+}
+

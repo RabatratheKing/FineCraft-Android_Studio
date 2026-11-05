@@ -36,41 +36,36 @@ void addFace(std::vector<float>& vertices, int x, int y, int z, int faceType, in
     }
 }
 
-void generateChunkData(int cx, int cz, uint8_t tempData[CHUNK_SIZE][CHUNK_HEIGHT][CHUNK_SIZE]) {
-    memset(tempData, 0, CHUNK_SIZE * CHUNK_HEIGHT * CHUNK_SIZE);
+void generateChunkData(int cx, int cz, StateId tempData[CHUNK_SIZE][CHUNK_HEIGHT][CHUNK_SIZE]) {
+    memset(tempData, 0, CHUNK_SIZE * CHUNK_HEIGHT * CHUNK_SIZE * sizeof(StateId));
     if (cx == 0 && cz == 0) {
         for (int x = 0; x < CHUNK_SIZE; ++x) {
             for (int z = 0; z < CHUNK_SIZE; ++z) {
                 for (int y = 0; y < 4; ++y) {
-                    tempData[x][y][z] = 3; // Stone
+                    tempData[x][y][z] = 1; // Stone state ID 1
                 }
-                tempData[x][4][z] = 1; // Grass
+                tempData[x][4][z] = 2; // Grass block state ID 2
             }
         }
         // Prototype showcase blocks at y=5
-        tempData[2][5][2] = 3; // Stone block
-        tempData[4][5][2] = 4; // Oak Stairs (ID 4)
-        tempData[6][5][2] = 5; // Torch (ID 5)
-        tempData[8][5][2] = 6; // Oak Door lower (ID 6)
-        tempData[8][6][2] = 6; // Oak Door upper (ID 6)
+        tempData[2][5][2] = 1;    // Stone state ID 1
+        tempData[4][5][2] = 3918; // Oak Stairs state ID 3918
+        tempData[6][5][2] = 3370; // Torch state ID 3370
+        tempData[8][5][2] = 5666; // Oak Door lower state ID 5666
+        tempData[8][6][2] = 5658; // Oak Door upper state ID 5658
     } else {
         for (int x = 0; x < CHUNK_SIZE; ++x) {
             for (int z = 0; z < CHUNK_SIZE; ++z) {
                 for (int y = 0; y < 4; ++y) {
-                    tempData[x][y][z] = 3;
+                    tempData[x][y][z] = 1;
                 }
-                tempData[x][4][z] = 1;
+                tempData[x][4][z] = 2;
             }
         }
     }
 }
 
-void buildGreedyMesh(std::vector<float>& vertices, const std::function<uint8_t(int,int,int)>& getBlock) {
-    auto isOpaque = [](uint8_t b) -> bool {
-        if (b == 0) return false;
-        return Registry::getBlock(b).opaque;
-    };
-
+void buildGreedyMesh(std::vector<float>& vertices, const std::function<StateId(int,int,int)>& getBlock) {
     int dims[3] = {CHUNK_SIZE, CHUNK_HEIGHT, CHUNK_SIZE};
     
     for (int d = 0; d < 3; d++) {
@@ -81,27 +76,29 @@ void buildGreedyMesh(std::vector<float>& vertices, const std::function<uint8_t(i
         int q[3] = {0, 0, 0};
         q[d] = 1;
         
-        uint16_t mask[CHUNK_SIZE * CHUNK_HEIGHT];
+        uint32_t mask[CHUNK_SIZE * CHUNK_HEIGHT];
         
         for (x[d] = -1; x[d] < dims[d]; ) {
             int n = 0;
             for (x[v] = 0; x[v] < dims[v]; ++x[v]) {
                 for (x[u] = 0; x[u] < dims[u]; ++x[u]) {
-                    uint8_t b1 = (x[d] >= 0) ? getBlock(x[0], x[1], x[2]) : 0;
-                    uint8_t b2 = getBlock(x[0] + q[0], x[1] + q[1], x[2] + q[2]);
+                    StateId s1 = (x[d] >= 0) ? getBlock(x[0], x[1], x[2]) : 0;
+                    StateId s2 = getBlock(x[0] + q[0], x[1] + q[1], x[2] + q[2]);
+                    uint16_t b1 = Registry::getBlockIdForState(s1);
+                    uint16_t b2 = Registry::getBlockIdForState(s2);
                     
                     if (b1 == b2) {
                         mask[n] = 0;
                     } else {
-                        bool draw1 = (b1 != 0);
-                        bool draw2 = (b2 != 0);
+                        bool draw1 = (s1 != 0 && Registry::getBlockForState(s1).opaque);
+                        bool draw2 = (s2 != 0 && Registry::getBlockForState(s2).opaque);
                         
                         if (draw1 && !draw2) {
-                            mask[n] = b1 | (1 << 8); 
+                            mask[n] = b1 | (1 << 12);
                         } else if (!draw1 && draw2) {
-                            mask[n] = b2 | (2 << 8); 
+                            mask[n] = b2 | (2 << 12);
                         } else if (draw1 && draw2) {
-                            mask[n] = b1 | (1 << 8);
+                            mask[n] = b1 | (1 << 12);
                         } else {
                             mask[n] = 0;
                         }
@@ -135,8 +132,8 @@ void buildGreedyMesh(std::vector<float>& vertices, const std::function<uint8_t(i
                         int du[3] = {0,0,0}; du[u] = w;
                         int dv[3] = {0,0,0}; dv[v] = h;
                         
-                        uint8_t blockType = mask[n] & 0xFF;
-                        uint8_t dir = mask[n] >> 8;
+                        uint16_t blockType = mask[n] & 0xFFF;
+                        uint8_t dir = mask[n] >> 12;
                         
                         int faceType = 0;
                         float nx = 0.0f, ny = 0.0f, nz = 0.0f;
@@ -194,28 +191,30 @@ void buildGreedyMesh(std::vector<float>& vertices, const std::function<uint8_t(i
         }
     }
 
-    // Append loaded prototype geometry for prototype blocks in chunk
+    // Append loaded prototype geometry for state IDs in chunk
     for (int gx = 0; gx < CHUNK_SIZE; ++gx) {
         for (int gy = 0; gy < CHUNK_HEIGHT; ++gy) {
             for (int gz = 0; gz < CHUNK_SIZE; ++gz) {
-                uint8_t b = getBlock(gx, gy, gz);
-                if (b != 0 && fincraft::geometry::GeometryManager::hasPrototype(b)) {
-                    const auto* proto = fincraft::geometry::GeometryManager::getPrototype(b);
+                StateId sId = getBlock(gx, gy, gz);
+                if (sId != 0 && fincraft::geometry::GeometryManager::hasPrototypeForState(sId)) {
+                    const auto* proto = fincraft::geometry::GeometryManager::getPrototypeForState(sId);
                     if (proto) {
                         for (const auto& comp : proto->components) {
-                            const auto& v10f = comp.vertices10f;
-                            for (size_t i = 0; i < v10f.size(); i += 10) {
-                                float vx = v10f[i + 0] + (float)gx;
-                                float vy = v10f[i + 1] + (float)gy;
-                                float vz = v10f[i + 2] + (float)gz;
-                                float u  = v10f[i + 3];
-                                float v  = v10f[i + 4];
-                                float tex = v10f[i + 5];
-                                float nx = v10f[i + 6];
-                                float ny = v10f[i + 7];
-                                float nz = v10f[i + 8];
-                                float ao = v10f[i + 9];
-                                vertices.insert(vertices.end(), {vx, vy, vz, u, v, tex, nx, ny, nz, ao});
+                            if (comp.stateId == sId || proto->components.size() == 1) {
+                                const auto& v10f = comp.vertices10f;
+                                for (size_t i = 0; i < v10f.size(); i += 10) {
+                                    float vx = v10f[i + 0] + (float)gx;
+                                    float vy = v10f[i + 1] + (float)gy;
+                                    float vz = v10f[i + 2] + (float)gz;
+                                    float u  = v10f[i + 3];
+                                    float v  = v10f[i + 4];
+                                    float tex = v10f[i + 5];
+                                    float nx = v10f[i + 6];
+                                    float ny = v10f[i + 7];
+                                    float nz = v10f[i + 8];
+                                    float ao = v10f[i + 9];
+                                    vertices.insert(vertices.end(), {vx, vy, vz, u, v, tex, nx, ny, nz, ao});
+                                }
                             }
                         }
                     }
@@ -226,7 +225,7 @@ void buildGreedyMesh(std::vector<float>& vertices, const std::function<uint8_t(i
 }
 
 void doGen(ChunkPos pos) {
-    uint8_t tempData[CHUNK_SIZE][CHUNK_HEIGHT][CHUNK_SIZE];
+    StateId tempData[CHUNK_SIZE][CHUNK_HEIGHT][CHUNK_SIZE];
     generateChunkData(pos.x, pos.z, tempData);
     
     std::lock_guard<std::mutex> lock(worldMutex);
@@ -252,7 +251,7 @@ void doGen(ChunkPos pos) {
 }
 
 void doMesh(ChunkPos pos) {
-    uint8_t localData[3][3][CHUNK_SIZE][CHUNK_HEIGHT][CHUNK_SIZE];
+    StateId localData[3][3][CHUNK_SIZE][CHUNK_HEIGHT][CHUNK_SIZE];
     bool valid[3][3] = {false};
     
     {
@@ -272,7 +271,7 @@ void doMesh(ChunkPos pos) {
         }
     }
     
-    auto getBlock = [&](int x, int y, int z) -> uint8_t {
+    auto getBlock = [&](int x, int y, int z) -> StateId {
         if (y < 0 || y >= CHUNK_HEIGHT) return 0;
         int cx = 1, cz = 1;
         if (x < 0) { cx = 0; x += CHUNK_SIZE; }
@@ -425,8 +424,8 @@ bool isBlockSolid(int x, int y, int z) {
     std::lock_guard<std::mutex> lock(worldMutex);
     auto it = chunks.find({cx, cz});
     if (it != chunks.end() && it->second.state >= ChunkState::Generated) {
-        uint8_t block = it->second.data[lx][y][lz];
-        return block != 0;
+        StateId blockState = it->second.data[lx][y][lz];
+        return blockState != 0 && Registry::getBlockForState(blockState).solid;
     }
     return false;
 }
